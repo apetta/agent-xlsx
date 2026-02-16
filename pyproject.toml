@@ -1,0 +1,69 @@
+[project]
+name = "agent-xlsx"
+version = "0.1.0"
+description = "XLSX file CLI built with Agent Experience (AX) in mind."
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+readme = "README.md"
+authors = [
+    { name = "Akshay Petta", email = "33671231+apetta@users.noreply.github.com" }
+]
+requires-python = ">=3.10"
+keywords = ["excel", "xlsx", "cli", "agent", "llm", "polars", "spreadsheet"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Office/Business :: Financial :: Spreadsheet",
+    "Topic :: Software Development :: Libraries",
+    "Typing :: Typed",
+]
+dependencies = [
+    "defusedxml>=0.7.0",
+    "fastexcel>=0.19.0",
+    "oletools>=0.60",
+    "openpyxl>=3.1.0",
+    "Pillow>=10.0.0",
+    "polars>=1.0.0",
+    "pydantic>=2.0.0",
+    "pymupdf>=1.24.0",
+    "rich>=13.0.0",
+    "typer>=0.9.0",
+    "xlwings>=0.33.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/apetta/agent-xlsx"
+Repository = "https://github.com/apetta/agent-xlsx"
+Issues = "https://github.com/apetta/agent-xlsx/issues"
+
+[project.scripts]
+agent-xlsx = "agent_xlsx.cli:app"
+
+[project.optional-dependencies]
+aspose = [
+    "aspose-cells-python>=25.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.9.17,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.0",
+]
