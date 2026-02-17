@@ -26,7 +26,7 @@ def read(
     ),
     sheet: Optional[str] = typer.Option(None, "--sheet", "-s", help="Sheet name"),
     limit: int = typer.Option(DEFAULT_LIMIT, "--limit", "-l", help="Maximum rows to return"),
-    offset: int = typer.Option(DEFAULT_OFFSET, "--offset", "-o", help="Rows to skip"),
+    offset: int = typer.Option(DEFAULT_OFFSET, "--offset", help="Rows to skip"),
     format_: str = typer.Option("json", "--format", "-f", help="Output format: json or csv"),
     formulas: bool = typer.Option(
         False,

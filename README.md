@@ -40,10 +40,22 @@ LLM agents working with Excel files face a fundamental problem: existing librari
 
 ## Installation
 
-### CLI
+### uvx (recommended — zero install)
 
 ```bash
-uv add agent-xlsx     # or: pip install agent-xlsx
+uvx agent-xlsx probe report.xlsx
+```
+
+### Global install
+
+```bash
+uv tool install agent-xlsx    # or: pipx install agent-xlsx
+```
+
+### pip
+
+```bash
+pip install agent-xlsx
 ```
 
 ### Agent Skill

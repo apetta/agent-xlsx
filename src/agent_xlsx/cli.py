@@ -2,14 +2,41 @@
 
 from __future__ import annotations
 
+from typing import Optional
+
 import typer
+
+from agent_xlsx import __version__
+
+
+def _version_callback(value: bool) -> None:
+    if value:
+        typer.echo(f"agent-xlsx {__version__}")
+        raise typer.Exit()
+
 
 app = typer.Typer(
     name="agent-xlsx",
-    help="XLSX file CLI built with Agent Experience (AX) in mind..",
+    help="XLSX file CLI built with Agent Experience (AX) in mind.",
     no_args_is_help=True,
     pretty_exceptions_enable=False,
+    add_completion=False,
+    context_settings={"help_option_names": ["-h", "--help"]},
 )
+
+
+@app.callback()
+def main(
+    version: Optional[bool] = typer.Option(
+        None,
+        "--version",
+        "-V",
+        help="Show version and exit.",
+        callback=_version_callback,
+        is_eager=True,
+    ),
+) -> None:
+    """XLSX file CLI built with Agent Experience (AX) in mind."""
 
 
 def _register_commands() -> None:
