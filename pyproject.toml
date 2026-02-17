@@ -1,6 +1,6 @@
 [project]
 name = "agent-xlsx"
-version = "0.1.0"
+version = "0.1.1"
 description = "XLSX file CLI built with Agent Experience (AX) in mind."
 license = "Apache-2.0"
 license-files = ["LICENSE"]
