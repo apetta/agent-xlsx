@@ -208,6 +208,13 @@ def screenshot(
                 from PIL import Image
 
                 img = Image.open(str(png_path))
+                # CopyPicture exports "No Fill" cells as transparent.
+                # Flatten onto a white background so the PNG is opaque.
+                if img.mode == "RGBA":
+                    bg = Image.new("RGBA", img.size, (255, 255, 255, 255))
+                    img = Image.alpha_composite(bg, img)
+                    img = img.convert("RGB")
+                    img.save(str(png_path))
                 width, height = img.size
                 img.close()
 
