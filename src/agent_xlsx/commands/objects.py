@@ -18,12 +18,8 @@ from agent_xlsx.utils.validation import validate_file
 @handle_error
 def objects(
     file: str = typer.Argument(..., help="Path to the Excel file"),
-    sheet: Optional[str] = typer.Option(
-        None, "--sheet", "-s", help="Sheet name to inspect"
-    ),
-    export: Optional[str] = typer.Option(
-        None, "--export", "-e", help="Export a chart by name"
-    ),
+    sheet: Optional[str] = typer.Option(None, "--sheet", "-s", help="Sheet name to inspect"),
+    export: Optional[str] = typer.Option(None, "--export", "-e", help="Export a chart by name"),
     output_path: Optional[str] = typer.Option(
         None, "--output", "-o", help="Output file/directory path"
     ),

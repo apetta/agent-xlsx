@@ -3,7 +3,7 @@
 Exports workbook sheets to HD PNG with full visual fidelity — charts, shapes,
 arrows, conditional formatting, and all drawing objects are preserved.
 
-Uses xlwings (Excel) when available, falls back to LibreOffice headless rendering.
+Uses Aspose when available, then xlwings (Excel), then LibreOffice headless.
 Supports per-sheet and range-level capture.
 """
 
@@ -35,9 +35,7 @@ def screenshot(
     output_path: Optional[str] = typer.Option(
         None, "--output", "-o", help="Output file/directory path"
     ),
-    dpi: int = typer.Option(
-        200, "--dpi", help="DPI for PNG rendering (LibreOffice backend only)"
-    ),
+    dpi: int = typer.Option(200, "--dpi", help="DPI for PNG rendering (LibreOffice backend only)"),
     timeout: int = typer.Option(
         30, "--timeout", help="Timeout in seconds (LibreOffice backend only)"
     ),
@@ -55,8 +53,8 @@ def screenshot(
 ) -> None:
     """Capture sheet(s) or a range as HD PNG for visual understanding.
 
-    Uses Excel (via xlwings) when available, otherwise falls back to LibreOffice
-    headless rendering. Use --engine to force a specific backend.
+    Uses Aspose when available, then Excel (via xlwings), then LibreOffice.
+    Use --engine to force a specific backend.
 
     Produces HD per-sheet PNG images that Claude Code can view natively.
     Use --base64 to return image data inline in the JSON response without
@@ -107,17 +105,16 @@ def screenshot(
             raise LibreOfficeNotFoundError()
         use_engine = "libreoffice"
     elif engine_lower == "auto":
-        if is_excel_available():
-            use_engine = "excel"
-        else:
-            from agent_xlsx.adapters.aspose_adapter import is_aspose_available
+        from agent_xlsx.adapters.aspose_adapter import is_aspose_available
 
-            if is_aspose_available():
-                use_engine = "aspose"
-            elif is_libreoffice_available():
-                use_engine = "libreoffice"
-            else:
-                raise NoRenderingBackendError("screenshot")
+        if is_aspose_available():
+            use_engine = "aspose"
+        elif is_excel_available():
+            use_engine = "excel"
+        elif is_libreoffice_available():
+            use_engine = "libreoffice"
+        else:
+            raise NoRenderingBackendError("screenshot")
     else:
         raise NoRenderingBackendError("screenshot")
 
@@ -152,6 +149,9 @@ def screenshot(
             timeout=timeout,
         )
 
+    # Quality gate — detect degenerate captures (tiny images)
+    _validate_capture_quality(result)
+
     # Encode file(s) as base64 and embed in result
     if base64_output:
         import base64
@@ -178,3 +178,25 @@ def screenshot(
                 del result["path"]
 
     output(result)
+
+
+def _validate_capture_quality(result: dict) -> None:
+    """Flag degenerate captures (tiny images) so agents don't waste time on garbage."""
+    from agent_xlsx.utils.constants import MIN_CAPTURE_HEIGHT, MIN_CAPTURE_WIDTH
+
+    def _check(entry: dict) -> None:
+        w = entry.get("width", 0)
+        h = entry.get("height", 0)
+        if w < MIN_CAPTURE_WIDTH or h < MIN_CAPTURE_HEIGHT:
+            entry["warning"] = (
+                f"Degenerate capture ({w}\u00d7{h}px). "
+                "The captured range is likely too small or empty. "
+                "Try without a range argument to capture the full sheet."
+            )
+            result["status"] = "partial"
+
+    if "sheets" in result:
+        for sheet_entry in result["sheets"]:
+            _check(sheet_entry)
+    else:
+        _check(result)

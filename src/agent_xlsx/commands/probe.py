@@ -32,6 +32,12 @@ def probe(
         "--full",
         help="All detail: types + nulls + sample(3) + stats",
     ),
+    no_header: bool = typer.Option(
+        False,
+        "--no-header",
+        help="Treat row 1 as data, use column letters (A, B, C) as headers. "
+        "Use for non-tabular sheets like P&L reports and dashboards.",
+    ),
 ) -> None:
     """Ultra-fast workbook profiling — lean by default.
 
@@ -53,6 +59,7 @@ def probe(
         sample_rows=sample,
         stats=stats,
         include_types=types,
+        no_header=no_header,
     )
 
     output(result)

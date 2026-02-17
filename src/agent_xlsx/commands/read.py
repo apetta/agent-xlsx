@@ -6,13 +6,13 @@ from typing import Optional
 
 import typer
 
-from agent_xlsx.adapters.polars_adapter import get_sheet_names, read_sheet_data
+from agent_xlsx.adapters.polars_adapter import get_sheet_names, read_exact_range, read_sheet_data
 from agent_xlsx.cli import app
 from agent_xlsx.formatters.json_formatter import output
 from agent_xlsx.utils.constants import DEFAULT_LIMIT, DEFAULT_OFFSET, MAX_READ_ROWS
 from agent_xlsx.utils.dates import convert_date_values, detect_date_columns
 from agent_xlsx.utils.errors import SheetNotFoundError, handle_error
-from agent_xlsx.utils.validation import parse_range, validate_file
+from agent_xlsx.utils.validation import col_letter_to_index, parse_range, validate_file
 
 
 @app.command()
@@ -43,6 +43,12 @@ def read(
         "--descending",
         help="Sort in descending order",
     ),
+    no_header: bool = typer.Option(
+        False,
+        "--no-header",
+        help="Treat row 1 as data, use column letters (A, B, C) as headers. "
+        "Use for non-tabular sheets like P&L reports and dashboards.",
+    ),
 ) -> None:
     """Read data from an Excel range or sheet.
 
@@ -61,7 +67,6 @@ def read(
 
     # Fast path — Polars + fastexcel
     target_sheet = sheet or 0
-    use_columns = None
     range_info = None
 
     if range_:
@@ -75,30 +80,37 @@ def read(
         if target_sheet not in available:
             raise SheetNotFoundError(target_sheet, available)
 
-    # Build column filter from range
     if range_info and range_info["start"]:
-        start_col_letters = "".join(c for c in range_info["start"] if c.isalpha())
-        if range_info["end"]:
-            end_col_letters = "".join(c for c in range_info["end"] if c.isalpha())
-            use_columns = f"{start_col_letters}:{end_col_letters}"
-
-    df = read_sheet_data(
-        filepath=path,
-        sheet_name=target_sheet,
-        skip_rows=offset,
-        n_rows=effective_limit,
-        use_columns=use_columns,
-    )
-
-    # Apply row range filtering if range specifies rows
-    if range_info and range_info["start"]:
+        # Exact range mode — bypass header consumption entirely.
+        # This guarantees cell references from `search` work correctly with `read`.
+        start_col = "".join(c for c in range_info["start"] if c.isalpha())
         start_row = int("".join(c for c in range_info["start"] if c.isdigit()))
+
         if range_info["end"]:
+            end_col = "".join(c for c in range_info["end"] if c.isalpha())
             end_row = int("".join(c for c in range_info["end"] if c.isdigit()))
-            # Rows in range are 1-based; row 1 is header, data starts at row 2 (index 0)
-            row_start = max(start_row - 2, 0)  # -2: 1 for header, 1 for 0-based
-            row_end = end_row - 1  # -1 for header
-            df = df.slice(row_start, row_end - row_start)
+        else:
+            # Single cell — treat as a 1×1 range
+            end_col = start_col
+            end_row = start_row
+
+        df = read_exact_range(
+            filepath=path,
+            sheet_name=target_sheet,
+            start_col_idx=col_letter_to_index(start_col),
+            end_col_idx=col_letter_to_index(end_col),
+            start_row=start_row,
+            end_row=end_row,
+        )
+    else:
+        # No range — standard tabular read (or headerless when --no-header)
+        df = read_sheet_data(
+            filepath=path,
+            sheet_name=target_sheet,
+            skip_rows=offset,
+            n_rows=effective_limit,
+            no_header=no_header,
+        )
 
     # Sort if requested
     if sort:
@@ -174,9 +186,12 @@ def _read_with_formulas(
 
     # Determine cell range
     if range_info and range_info["start"]:
-        cell_range = range_info["start"]
         if range_info["end"]:
             cell_range = f"{range_info['start']}:{range_info['end']}"
+        else:
+            # Single cell — expand to self-range for consistent openpyxl
+            # tuple-of-tuples return (ws["A1"] returns a bare Cell object)
+            cell_range = f"{range_info['start']}:{range_info['start']}"
         rows = list(ws[cell_range])
     else:
         rows = list(ws.iter_rows(min_row=1 + offset, max_row=1 + offset + limit))

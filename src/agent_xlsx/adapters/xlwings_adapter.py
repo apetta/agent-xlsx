@@ -9,6 +9,7 @@ Requires Microsoft Excel to be installed on the host machine (macOS or Windows).
 from __future__ import annotations
 
 import contextlib
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -65,6 +66,77 @@ def is_excel_available() -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Data range detection
+# ---------------------------------------------------------------------------
+
+
+def _pick_sample_indices(start: int, end: int, count: int = 5) -> list[int]:
+    """Pick up to *count* evenly-spaced indices between *start* and *end* (inclusive)."""
+    if end <= start:
+        return [start]
+    if (end - start + 1) <= count:
+        return list(range(start, end + 1))
+
+    step = (end - start) / (count - 1)
+    indices = [start + round(step * i) for i in range(count)]
+    if indices[-1] != end:
+        indices[-1] = end
+    # Deduplicate while preserving order
+    seen: set[int] = set()
+    return [x for x in indices if not (x in seen or seen.add(x))]  # type: ignore[func-returns-value]
+
+
+def _find_data_range(sheet):  # noqa: ANN001
+    """Detect actual data extent, ignoring formatted-but-empty cells.
+
+    Uses xlwings' ``.end()`` method (equivalent to Ctrl+Arrow in Excel) to
+    sample representative rows and columns, finding the true last data row
+    and column.  Falls back to ``used_range`` on any error.
+    """
+    try:
+        used = sheet.used_range
+        if used is None:
+            return sheet.range("A1")
+
+        ur_last_row = used.last_cell.row
+        ur_last_col = used.last_cell.column
+
+        if ur_last_row <= 2 and ur_last_col <= 2:
+            return used
+
+        # --- last data column ------------------------------------------------
+        sample_rows = _pick_sample_indices(1, ur_last_row, count=5)
+        max_data_col = 1
+        for r in sample_rows:
+            cell = sheet.range((r, ur_last_col))
+            if cell.value is not None:
+                max_data_col = ur_last_col
+                break  # can't get wider than used_range
+            found = cell.end("left")
+            if found.value is not None:
+                max_data_col = max(max_data_col, found.column)
+
+        # --- last data row ----------------------------------------------------
+        sample_cols = _pick_sample_indices(1, max_data_col, count=5)
+        max_data_row = 1
+        for c in sample_cols:
+            cell = sheet.range((ur_last_row, c))
+            if cell.value is not None:
+                max_data_row = ur_last_row
+                break  # can't get taller than used_range
+            found = cell.end("up")
+            if found.value is not None:
+                max_data_row = max(max_data_row, found.row)
+
+        max_data_row = max(min(max_data_row, ur_last_row), 1)
+        max_data_col = max(min(max_data_col, ur_last_col), 1)
+
+        return sheet.range((1, 1), (max_data_row, max_data_col))
+    except Exception:
+        return sheet.used_range
+
+
+# ---------------------------------------------------------------------------
 # Screenshots
 # ---------------------------------------------------------------------------
 
@@ -93,7 +165,6 @@ def screenshot(
     stem = filepath.stem
 
     try:
-        import sys
         need_visible = sys.platform == "darwin"
 
         with _excel_session(filepath, visible=need_visible) as (app, wb):
@@ -114,22 +185,19 @@ def screenshot(
 
             for target in target_sheets:
                 sheet = wb.sheets[target]
-                sheet.autofit('c')  # auto-fit column widths to prevent ######## display
 
                 if range_str:
                     capture_range = sheet.range(range_str)
                 else:
-                    # current_region gives the contiguous data block from A1,
-                    # bounded by the first empty row/column — far tighter than
-                    # used_range which includes every cell Excel ever touched.
-                    capture_range = sheet.range("A1").current_region
+                    capture_range = _find_data_range(sheet)
+
+                # Auto-fit only the captured columns (not all formatted columns)
+                capture_range.columns.autofit()
 
                 # Capture resolved range address for the response
                 resolved_range = capture_range.address.replace("$", "")
 
-                safe_name = (
-                    target.replace("/", "_").replace("\\", "_").replace(" ", "_")
-                )
+                safe_name = target.replace("/", "_").replace("\\", "_").replace(" ", "_")
                 if range_str:
                     safe_range = range_str.replace(":", "-").replace("$", "")
                     png_path = output_dir / f"{stem}_{safe_name}_{safe_range}.png"

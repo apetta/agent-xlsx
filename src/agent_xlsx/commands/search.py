@@ -25,6 +25,12 @@ def search(
     in_formulas: bool = typer.Option(
         False, "--in-formulas", help="Search in formula strings (uses openpyxl, slower)"
     ),
+    no_header: bool = typer.Option(
+        False,
+        "--no-header",
+        help="Treat row 1 as data, use column letters. "
+        "Use for non-tabular sheets like P&L reports.",
+    ),
 ) -> None:
     """Search for values across the workbook.
 
@@ -43,6 +49,7 @@ def search(
             sheet_name=sheet,
             regex=regex,
             ignore_case=ignore_case,
+            no_header=no_header,
         )
 
     elapsed_ms = round((time.perf_counter() - start) * 1000, 1)

@@ -120,17 +120,16 @@ def recalc(
                 raise LibreOfficeNotFoundError()
             use_engine = "libreoffice"
         elif engine_lower == "auto":
-            if is_excel_available():
-                use_engine = "excel"
-            else:
-                from agent_xlsx.adapters.aspose_adapter import is_aspose_available
+            from agent_xlsx.adapters.aspose_adapter import is_aspose_available
 
-                if is_aspose_available():
-                    use_engine = "aspose"
-                elif is_libreoffice_available():
-                    use_engine = "libreoffice"
-                else:
-                    raise NoRenderingBackendError("recalc")
+            if is_aspose_available():
+                use_engine = "aspose"
+            elif is_excel_available():
+                use_engine = "excel"
+            elif is_libreoffice_available():
+                use_engine = "libreoffice"
+            else:
+                raise NoRenderingBackendError("recalc")
         else:
             raise NoRenderingBackendError("recalc")
 

@@ -105,16 +105,14 @@ def _prepare_sheet_for_export(
         if name != sheet_name:
             del wb[name]
 
-    ws = wb.active
+    ws = wb[sheet_name]
 
     # Set print area if range specified
     if range_str:
         ws.print_area = range_str
 
     # Optimise for PDF export
-    ws.page_margins = PageMargins(
-        left=0.1, right=0.1, top=0.1, bottom=0.1, header=0, footer=0
-    )
+    ws.page_margins = PageMargins(left=0.1, right=0.1, top=0.1, bottom=0.1, header=0, footer=0)
     ws.page_setup = PrintPageSetup(
         orientation="landscape",
         fitToWidth=1,

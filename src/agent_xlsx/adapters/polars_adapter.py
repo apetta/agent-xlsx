@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -49,10 +51,13 @@ def read_sheet_data(
     skip_rows: int = 0,
     n_rows: int | None = None,
     use_columns: str | list[str] | None = None,
+    no_header: bool = False,
 ) -> pl.DataFrame:
     """Read sheet data into a Polars DataFrame via fastexcel (zero-copy Arrow).
 
     For large files (>100MB), automatically chunks the read to stay within memory budget.
+    When *no_header* is True, row 1 is treated as data and columns are named
+    with Excel letters (A, B, C, …).
     """
     fpath = str(filepath)
     size = file_size_bytes(fpath)
@@ -67,13 +72,61 @@ def read_sheet_data(
         read_opts["n_rows"] = n_rows
     if use_columns is not None:
         read_opts["use_columns"] = use_columns
+    if no_header:
+        read_opts["header_row"] = None
 
     if size < CHUNK_THRESHOLD_BYTES or n_rows is not None:
         # Direct read — fastexcel handles this efficiently
-        return pl.read_excel(fpath, sheet_name=resolved_name, read_options=read_opts or None)
+        df = pl.read_excel(fpath, sheet_name=resolved_name, read_options=read_opts or None)
+    else:
+        # Chunked read for very large files
+        df = _read_chunked(fpath, resolved_name, skip_rows, n_rows)
 
-    # Chunked read for very large files
-    return _read_chunked(fpath, resolved_name, skip_rows, n_rows)
+    if no_header:
+        col_letters = [index_to_col_letter(i) for i in range(len(df.columns))]
+        df = df.rename(dict(zip(df.columns, col_letters)))
+
+    return df
+
+
+def read_exact_range(
+    filepath: str | Path,
+    sheet_name: str | int,
+    start_col_idx: int,
+    end_col_idx: int,
+    start_row: int,
+    end_row: int,
+) -> pl.DataFrame:
+    """Read an exact Excel range with no header assumption.
+
+    All row params use Excel 1-based conventions. Column indices are 0-based
+    (A=0, B=1, ...). Returns a DataFrame with Excel column-letter headers.
+    """
+    fpath = str(filepath)
+    resolved_name = _resolve_sheet_name(fpath, sheet_name)
+
+    # With header_row=None, fastexcel names columns __UNNAMED__N so letter-based
+    # column selection doesn't work.  Use 0-based integer indices instead.
+    use_cols: list[int] = list(range(start_col_idx, end_col_idx + 1))
+
+    reader = fastexcel.read_excel(fpath)
+    with _suppress_stderr():
+        sheet = reader.load_sheet(
+            resolved_name,
+            header_row=None,
+            skip_rows=start_row - 1,
+            n_rows=end_row - start_row + 1,
+            use_columns=use_cols,
+        )
+        df = pl.DataFrame(sheet)
+
+    # Rename generic __UNNAMED__N columns to Excel letters
+    num_cols = end_col_idx - start_col_idx + 1
+    col_letters = [index_to_col_letter(start_col_idx + i) for i in range(num_cols)]
+    if len(df.columns) <= len(col_letters):
+        df = df.rename(dict(zip(df.columns, col_letters[: len(df.columns)])))
+
+    return df
 
 
 def _read_chunked(
@@ -118,12 +171,17 @@ def probe_workbook(
     sample_rows: int = 0,
     stats: bool = False,
     include_types: bool = False,
+    no_header: bool = False,
 ) -> dict[str, Any]:
     """Ultra-fast workbook profiling via fastexcel + Polars.
 
     Default is a lean metadata-only probe (sheet names, dimensions, headers) with
     zero data parsing.  Pass ``include_types``, ``sample_rows``, or ``stats`` to
     opt into progressively richer detail.
+
+    When *no_header* is True, row 1 is treated as data and column names
+    become Excel letters (A, B, C, …).  This is the correct mode for
+    non-tabular spreadsheets like P&L reports and dashboards.
     """
     start = time.perf_counter()
     fpath = str(filepath)
@@ -155,16 +213,28 @@ def probe_workbook(
 
         if not needs_data:
             # Lean path — headers from metadata only, zero data parsing
-            sheet_info["headers"] = [c.name for c in meta.available_columns()]
+            if no_header:
+                n_cols = meta.width
+                sheet_info["headers"] = [index_to_col_letter(i) for i in range(n_cols)]
+            else:
+                sheet_info["headers"] = [c.name for c in meta.available_columns()]
             headers = sheet_info["headers"]
             sheet_info["last_col"] = index_to_col_letter(len(headers) - 1) if headers else "A"
             sheet_info["column_map"] = {h: index_to_col_letter(i) for i, h in enumerate(headers)}
             sheets_result.append(sheet_info)
             continue
 
-        # Load full sheet data for profiling
-        sheet = reader.load_sheet(name)
-        df = pl.DataFrame(sheet)
+        # Load full sheet data for profiling — suppress fastexcel's stderr
+        # "Could not determine dtype" warnings for entirely-null columns.
+        with _suppress_stderr():
+            if no_header:
+                sheet = reader.load_sheet(name, header_row=None)
+                df = pl.DataFrame(sheet)
+                col_letters = [index_to_col_letter(i) for i in range(len(df.columns))]
+                df = df.rename(dict(zip(df.columns, col_letters)))
+            else:
+                sheet = reader.load_sheet(name)
+                df = pl.DataFrame(sheet)
 
         sheet_info["headers"] = df.columns
         headers = sheet_info["headers"]
@@ -178,8 +248,7 @@ def probe_workbook(
 
             # Detect date columns masquerading as float64
             float_cols = [
-                col for col, t in sheet_info["column_types"].items()
-                if t in ("float64", "float32")
+                col for col, t in sheet_info["column_types"].items() if t in ("float64", "float32")
             ]
             if float_cols:
                 date_col_names = detect_date_columns(fpath, name)
@@ -187,10 +256,16 @@ def probe_workbook(
                     if col in date_col_names:
                         sheet_info["column_types"][col] = "date"
 
-            # Null counts per column
+            # Null counts per column — omit fully-null columns to reduce noise
             if len(df) > 0:
                 null_row = df.null_count().row(0)
-                sheet_info["null_counts"] = dict(zip(df.columns, null_row))
+                all_null_counts = dict(zip(df.columns, null_row))
+                sheet_info["null_counts"] = {
+                    col: count for col, count in all_null_counts.items() if count < len(df)
+                }
+                fully_null_count = len(all_null_counts) - len(sheet_info["null_counts"])
+                if fully_null_count > 0:
+                    sheet_info["fully_null_columns"] = fully_null_count
             else:
                 sheet_info["null_counts"] = {col: 0 for col in df.columns}
 
@@ -198,8 +273,7 @@ def probe_workbook(
         capped_sample = min(sample_rows, MAX_SAMPLE_ROWS)
         if capped_sample > 0 and len(df) > 0:
             date_col_set = {
-                col for col, t in sheet_info.get("column_types", {}).items()
-                if t == "date"
+                col for col, t in sheet_info.get("column_types", {}).items() if t == "date"
             }
             head_rows = _df_to_rows(df.head(capped_sample))
             tail_rows = _df_to_rows(df.tail(capped_sample))
@@ -213,16 +287,26 @@ def probe_workbook(
 
         # Extended statistics via Polars describe()
         if stats and len(df) > 0:
+            # Identify fully-null columns to exclude from stats (noise reduction)
+            null_counts = sheet_info.get("null_counts", {})
+            fully_null_cols = {col for col, count in null_counts.items() if count >= len(df)}
+
             date_col_set = {
-                col for col, t in sheet_info.get("column_types", {}).items()
-                if t == "date"
+                col for col, t in sheet_info.get("column_types", {}).items() if t == "date"
             }
-            numeric_cols = [col for col, dtype in zip(df.columns, df.dtypes)
-                            if dtype.is_numeric() and col not in date_col_set]
+            numeric_cols = [
+                col
+                for col, dtype in zip(df.columns, df.dtypes)
+                if dtype.is_numeric() and col not in date_col_set and col not in fully_null_cols
+            ]
             if numeric_cols:
                 sheet_info["numeric_summary"] = _build_numeric_summary(df, numeric_cols)
 
-            string_cols = [col for col, dtype in zip(df.columns, df.dtypes) if dtype == pl.Utf8]
+            string_cols = [
+                col
+                for col, dtype in zip(df.columns, df.dtypes)
+                if dtype == pl.Utf8 and col not in fully_null_cols
+            ]
             if string_cols:
                 sheet_info["string_summary"] = _build_string_summary(df, string_cols)
 
@@ -280,10 +364,13 @@ def search_values(
     sheet_name: str | None = None,
     regex: bool = False,
     ignore_case: bool = False,
+    no_header: bool = False,
 ) -> list[dict[str, Any]]:
     """Search for values across sheets using Polars string matching.
 
-    Returns list of match dicts: {sheet, column, row, value}.
+    Returns list of match dicts: {sheet, column, row, cell, value}.
+    When *no_header* is True, columns are named with Excel letters and
+    cell references use simple 1-based row numbering (no header offset).
     """
     fpath = str(filepath)
     reader = fastexcel.read_excel(fpath)
@@ -299,8 +386,15 @@ def search_values(
     matches: list[dict[str, Any]] = []
 
     for name in target_sheets:
-        sheet = reader.load_sheet(name)
-        df = pl.DataFrame(sheet)
+        with _suppress_stderr():
+            if no_header:
+                sheet = reader.load_sheet(name, header_row=None)
+                df = pl.DataFrame(sheet)
+                col_letters = [index_to_col_letter(i) for i in range(len(df.columns))]
+                df = df.rename(dict(zip(df.columns, col_letters)))
+            else:
+                sheet = reader.load_sheet(name)
+                df = pl.DataFrame(sheet)
 
         if len(df) == 0:
             continue
@@ -329,14 +423,17 @@ def search_values(
                     cell_value = cell_value.item()
 
                 col_idx = df.columns.index(col)
-                # +2: 1-based indexing + header row
-                cell_ref = f"{index_to_col_letter(col_idx)}{row_idx + 2}"
+                col_letter = index_to_col_letter(col_idx)
+                # no_header: row 1 is data, so Excel row = row_idx + 1
+                # with header: row 1 consumed as header, so Excel row = row_idx + 2
+                excel_row = row_idx + 1 if no_header else row_idx + 2
+                cell_ref = f"{col_letter}{excel_row}"
 
                 matches.append(
                     {
                         "sheet": name,
                         "column": col,
-                        "row": row_idx + 1,  # 1-based for user display
+                        "row": excel_row,
                         "cell": cell_ref,
                         "value": cell_value,
                     }
@@ -351,6 +448,20 @@ def search_values(
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+
+@contextlib.contextmanager
+def _suppress_stderr():
+    """Suppress stderr output from Rust/fastexcel dtype warnings."""
+    devnull_fd = os.open(os.devnull, os.O_WRONLY)
+    old_stderr_fd = os.dup(2)
+    try:
+        os.dup2(devnull_fd, 2)
+        yield
+    finally:
+        os.dup2(old_stderr_fd, 2)
+        os.close(devnull_fd)
+        os.close(old_stderr_fd)
 
 
 def _resolve_sheet_name(filepath: str, sheet_name: str | int) -> str:

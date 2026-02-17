@@ -15,15 +15,9 @@ from agent_xlsx.utils.errors import handle_error
 @app.command(name="license")
 @handle_error
 def license_cmd(
-    set_path: Optional[str] = typer.Option(
-        None, "--set", help="Path to Aspose.Cells .lic file"
-    ),
-    status: bool = typer.Option(
-        False, "--status", help="Show current licence status"
-    ),
-    clear: bool = typer.Option(
-        False, "--clear", help="Remove saved licence path"
-    ),
+    set_path: Optional[str] = typer.Option(None, "--set", help="Path to Aspose.Cells .lic file"),
+    status: bool = typer.Option(False, "--status", help="Show current licence status"),
+    clear: bool = typer.Option(False, "--clear", help="Remove saved licence path"),
 ) -> None:
     """Manage Aspose.Cells licence for rendering engine.
 

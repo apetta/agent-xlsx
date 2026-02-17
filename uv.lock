@@ -4,9 +4,10 @@ requires-python = ">=3.10"
 
 [[package]]
 name = "agent-xlsx"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "." }
 dependencies = [
+    { name = "aspose-cells-python" },
     { name = "defusedxml" },
     { name = "fastexcel" },
     { name = "oletools" },
@@ -20,11 +21,6 @@ dependencies = [
     { name = "xlwings" },
 ]
 
-[package.optional-dependencies]
-aspose = [
-    { name = "aspose-cells-python" },
-]
-
 [package.dev-dependencies]
 dev = [
     { name = "ruff" },
@@ -32,7 +28,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aspose-cells-python", marker = "extra == 'aspose'", specifier = ">=25.0" },
+    { name = "aspose-cells-python", specifier = ">=25.0" },
     { name = "defusedxml", specifier = ">=0.7.0" },
     { name = "fastexcel", specifier = ">=0.19.0" },
     { name = "oletools", specifier = ">=0.60" },
@@ -45,7 +41,6 @@ requires-dist = [
     { name = "typer", specifier = ">=0.9.0" },
     { name = "xlwings", specifier = ">=0.33.0" },
 ]
-provides-extras = ["aspose"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "ruff", specifier = ">=0.15.0" }]

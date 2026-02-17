@@ -22,3 +22,7 @@ VBA_EXTENSIONS = {".xlsm", ".xlsb"}
 # Default pagination
 DEFAULT_LIMIT = 100
 DEFAULT_OFFSET = 0
+
+# Screenshot quality thresholds
+MIN_CAPTURE_WIDTH = 100
+MIN_CAPTURE_HEIGHT = 100
