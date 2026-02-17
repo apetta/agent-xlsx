@@ -33,15 +33,18 @@ agent-xlsx probe <file> [flags]
 |------|-------|------|---------|-------------|
 | `--sheet` | `-s` | str | all | Target specific sheet |
 | `--types` | | bool | false | Add column types + null counts |
-| `--sample` | | int | 0 | Add N head + N tail rows |
+| `--sample` | | int | 0 | Add N head + N tail rows (sparse dict format) |
 | `--stats` | | bool | false | Add numeric/string summaries (implies --types) |
 | `--full` | | bool | false | Shorthand for --types --sample 3 --stats |
+| `--no-header` | | bool | false | Treat row 1 as data, columns as Excel letters (A, B, C). Use for non-tabular sheets (P&L, dashboards) |
 
-**Output:** `sheets[].{name, dimensions, row_count, col_count, data_rows, data_cols, headers, column_map, last_col}`, `named_ranges`, `tables`
+**Output:** `sheets[].{name, index, visible, rows, cols, headers, last_col}`, `named_ranges`, `tables`
 
-With `--types`: adds `columns[].{name, dtype, null_count}`
-With `--sample`: adds `head_rows`, `tail_rows`
-With `--stats`: adds `stats.{numeric, string}`, `date_summary`
+- Default: `column_map` maps header names → column letters (omitted when `--no-header` since letters map to themselves)
+- With `--types`: adds `column_types` (fully-null columns omitted), `null_counts` (fully-null columns omitted), `fully_null_columns` count
+- With `--types --no-header`: adds `potential_headers[]` — auto-detected header candidate rows with sparse values (e.g. month names row)
+- With `--sample`: adds `sample.{head, tail}` as sparse dicts (only non-null cells, e.g. `{"H": "Food Sales", "I": 71847}`)
+- With `--stats`: adds `numeric_summary`, `string_summary` (capped to 5 top values, skips >50% null string columns), `date_summary`
 
 ---
 
@@ -62,8 +65,19 @@ agent-xlsx read <file> [range] [flags]
 | `--descending` | | bool | false | Reverse sort order |
 | `--formulas` | | bool | false | Return formula strings (openpyxl fallback) |
 | `--format` | `-f` | str | json | Output format: json, csv |
+| `--no-header` | | bool | false | Treat row 1 as data, columns as Excel letters |
+| `--compact` | | bool | false | Drop fully-null columns from output (strips separator columns) |
+| `--all-sheets` | | bool | false | Read the same range(s) from every sheet |
 
-**Range** is positional: `"A1:F50"` or `"Sheet1!A1:F50"`
+**Range** is positional: `"A1:F50"` or `"Sheet1!A1:F50"`. Comma-separated for multi-range: `"Sheet1!A1:C10,E1:G10,H1:J10"` (sheet prefix carries forward).
+
+**Multi-result output** (when using multi-range or `--all-sheets`):
+
+```json
+{"results": [{"range": "H54:AT54", "sheet": "2022", "headers": [...], "data": [...], "row_count": 1}], "total_ranges": 3, "compact": true, "read_time_ms": 12.5}
+```
+
+Single-range reads keep the existing flat format (backward compatible).
 
 ---
 
@@ -81,6 +95,7 @@ agent-xlsx search <file> <query> [flags]
 | `--regex` | | bool | false | Treat query as regex |
 | `--ignore-case` | `-i` | bool | false | Case-insensitive match |
 | `--in-formulas` | | bool | false | Search formula strings (openpyxl fallback) |
+| `--no-header` | | bool | false | Treat row 1 as data, columns as Excel letters |
 
 **Output:** `results[].{sheet, cell, value, row, col}` — max 25 results. Check `truncated` field.
 

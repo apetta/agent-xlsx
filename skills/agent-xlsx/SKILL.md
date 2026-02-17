@@ -22,12 +22,20 @@ agent-xlsx probe <file>                        # Sheet names, dims, headers, col
 agent-xlsx probe <file> --types                # + column types, null counts
 agent-xlsx probe <file> --full                 # + types, sample(3), stats, date_summary
 agent-xlsx probe <file> -s "Sales" --full      # Single-sheet deep-dive
+agent-xlsx probe <file> --no-header            # Non-tabular: P&L, dashboards (cols as A,B,C)
+agent-xlsx probe <file> --types --no-header    # + potential_headers auto-detection
 ```
 
-Probe returns `column_map` — map headers to column letters for building ranges:
+Tabular probes return `column_map` — map headers to column letters for building ranges:
 
 ```json
 {"column_map": {"user_id": "A", "amount": "E"}, "last_col": "W"}
+```
+
+Non-tabular probes (`--no-header`) with `--types` return `potential_headers` — auto-detected header rows:
+
+```json
+{"potential_headers": [{"row": 6, "values": {"I": "Dec", "J": "% sales", "L": "Nov"}}]}
 ```
 
 ## Essential Commands
@@ -41,6 +49,10 @@ agent-xlsx read <file> -s Sales "B2:G100"          # Sheet + range
 agent-xlsx read <file> --limit 500 --offset 100    # Pagination
 agent-xlsx read <file> --sort amount --descending  # Sorted
 agent-xlsx read <file> --formulas                  # Formula strings (slower, openpyxl)
+agent-xlsx read <file> "H54:AT54" -s 2022 --no-header --compact  # Non-tabular, drop null cols
+agent-xlsx read <file> "H54:AT54,H149:AT149" -s 2022 --compact   # Multi-range (1 call)
+agent-xlsx read <file> "H54:AT54" --all-sheets --compact          # Same range, every sheet (1 call)
+agent-xlsx read <file> "H54:AT54,H149:AT149" --all-sheets         # Multi-range × all sheets
 
 # Search
 agent-xlsx search <file> "revenue"                 # Exact match, all sheets
@@ -142,6 +154,15 @@ agent-xlsx probe file.xlsx --full             # Structure + types + samples + st
 agent-xlsx screenshot file.xlsx               # Visual understanding
 ```
 
+### Non-tabular spreadsheets (P&L, dashboards, management accounts)
+
+```bash
+agent-xlsx probe file.xlsx --types --no-header   # Structure + potential_headers
+agent-xlsx search file.xlsx "Total Sales" --no-header  # Find key rows
+agent-xlsx read file.xlsx "H54:AT54,H149:AT149,H156:AT156" -s 2022 --no-header --compact  # Multi-range
+agent-xlsx read file.xlsx "H54:AT54" --all-sheets --no-header --compact  # Same range across all sheets
+```
+
 ### Find and extract specific data
 
 ```bash
@@ -182,16 +203,20 @@ agent-xlsx vba suspect.xlsm --read-all        # Read all code
 ## Critical Rules
 
 1. **Always `probe` first** — instant (<10ms), returns sheet names and column_map
-2. **`--formulas` for formula strings** — default read returns computed values only (Polars, fast). Add `--formulas` for formula text (openpyxl, slower)
-3. **`--in-formulas` for formula search** — default search checks cell values. Add `--in-formulas` to search formula strings
-4. **Dates auto-convert** — Excel serial numbers (44927) become ISO strings ("2023-01-15") automatically
-5. **Check `truncated` field** — results are capped (search: 25, formulas: 50, comments: 20). Narrow query if truncated
-6. **Range is positional** — `"A1:F50"` or `"Sheet1!A1:F50"` is a positional argument, not a flag
-7. **`-o` preserves original** — write/format save to a new file when `--output` specified
-8. **Screenshot needs an engine** — requires Excel, Aspose, or LibreOffice. See [backends.md](references/backends.md)
-9. **VBA read vs run** — oletools for read/analysis (cross-platform), xlwings for execution (Excel required)
-10. **500MB memory limit** — large files auto-chunk. Use `--limit` for big reads
-11. **Writable: .xlsx and .xlsm only** — .xlsb, .xls, .ods are read-only
+2. **`--no-header` for non-tabular sheets** — P&L reports, dashboards, management accounts. Columns become Excel letters (A, B, C). Use with `probe`, `read`, and `search`
+3. **`--compact` to strip null columns** — drops separator/spacer columns from read output, reducing token waste
+4. **Multi-range reads** — comma-separated ranges in one call: `"H54:AT54,H149:AT149"` (sheet prefix carries forward)
+5. **`--all-sheets` for cross-sheet reads** — same range(s) from every sheet in one call
+6. **`--formulas` for formula strings** — default read returns computed values only (Polars, fast). Add `--formulas` for formula text (openpyxl, slower)
+7. **`--in-formulas` for formula search** — default search checks cell values. Add `--in-formulas` to search formula strings
+8. **Dates auto-convert** — Excel serial numbers (44927) become ISO strings ("2023-01-15") automatically
+9. **Check `truncated` field** — results are capped (search: 25, formulas: 50, comments: 20). Narrow query if truncated
+10. **Range is positional** — `"A1:F50"` or `"Sheet1!A1:F50"` is a positional argument, not a flag. Comma-separated for multi-range
+11. **`-o` preserves original** — write/format save to a new file when `--output` specified
+12. **Screenshot needs an engine** — requires Excel, Aspose, or LibreOffice. See [backends.md](references/backends.md)
+13. **VBA read vs run** — oletools for read/analysis (cross-platform), xlwings for execution (Excel required)
+14. **500MB memory limit** — large files auto-chunk. Use `--limit` for big reads
+15. **Writable: .xlsx and .xlsm only** — .xlsb, .xls, .ods are read-only
 
 ## Output Format
 

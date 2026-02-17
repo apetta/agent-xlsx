@@ -49,6 +49,30 @@ def parse_range(range_str: str) -> dict[str, str | None]:
     }
 
 
+def parse_multi_range(range_str: str) -> list[dict[str, str | None]]:
+    """Parse comma-separated ranges like ``Sheet!A1:C10,E1:G10`` into a list.
+
+    The sheet prefix from the first range carries forward to subsequent
+    ranges that don't specify one, e.g.
+    ``"2022!H54:AT54,H149:AT149"`` → both ranges on sheet ``"2022"``.
+    """
+    parts = range_str.split(",")
+    results: list[dict[str, str | None]] = []
+    sheet_ctx: str | None = None
+    for part in parts:
+        part = part.strip()
+        if "!" in part:
+            parsed = parse_range(part)
+        elif sheet_ctx:
+            parsed = parse_range(f"{sheet_ctx}!{part}")
+        else:
+            parsed = parse_range(part)
+        if parsed["sheet"]:
+            sheet_ctx = parsed["sheet"]
+        results.append(parsed)
+    return results
+
+
 def col_letter_to_index(col: str) -> int:
     """Convert Excel column letter(s) to 0-based index. A=0, B=1, Z=25, AA=26."""
     result = 0

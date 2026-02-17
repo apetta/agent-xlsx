@@ -18,7 +18,6 @@ from agent_xlsx.utils.constants import (
     MAX_SEARCH_RESULTS,
 )
 from agent_xlsx.utils.dates import (
-    convert_date_values,
     detect_date_columns,
     excel_serial_to_isodate,
 )
@@ -220,7 +219,10 @@ def probe_workbook(
                 sheet_info["headers"] = [c.name for c in meta.available_columns()]
             headers = sheet_info["headers"]
             sheet_info["last_col"] = index_to_col_letter(len(headers) - 1) if headers else "A"
-            sheet_info["column_map"] = {h: index_to_col_letter(i) for i, h in enumerate(headers)}
+            if not no_header:
+                sheet_info["column_map"] = {
+                    h: index_to_col_letter(i) for i, h in enumerate(headers)
+                }
             sheets_result.append(sheet_info)
             continue
 
@@ -239,11 +241,29 @@ def probe_workbook(
         sheet_info["headers"] = df.columns
         headers = sheet_info["headers"]
         sheet_info["last_col"] = index_to_col_letter(len(headers) - 1) if headers else "A"
-        sheet_info["column_map"] = {h: index_to_col_letter(i) for i, h in enumerate(headers)}
+        if not no_header:
+            sheet_info["column_map"] = {h: index_to_col_letter(i) for i, h in enumerate(headers)}
 
         if include_types:
+            # Null counts per column — compute first so we can filter other sections
+            fully_null_set: set[str] = set()
+            if len(df) > 0:
+                null_row = df.null_count().row(0)
+                all_null_counts = dict(zip(df.columns, null_row))
+                sheet_info["null_counts"] = {
+                    col: count for col, count in all_null_counts.items() if count < len(df)
+                }
+                fully_null_set = set(all_null_counts.keys()) - set(sheet_info["null_counts"].keys())
+                if fully_null_set:
+                    sheet_info["fully_null_columns"] = len(fully_null_set)
+            else:
+                sheet_info["null_counts"] = {col: 0 for col in df.columns}
+
+            # Column types — omit fully-null columns (zero information)
             sheet_info["column_types"] = {
-                col: _polars_dtype_to_str(dtype) for col, dtype in zip(df.columns, df.dtypes)
+                col: _polars_dtype_to_str(dtype)
+                for col, dtype in zip(df.columns, df.dtypes)
+                if col not in fully_null_set
             }
 
             # Detect date columns masquerading as float64
@@ -256,30 +276,27 @@ def probe_workbook(
                     if col in date_col_names:
                         sheet_info["column_types"][col] = "date"
 
-            # Null counts per column — omit fully-null columns to reduce noise
-            if len(df) > 0:
-                null_row = df.null_count().row(0)
-                all_null_counts = dict(zip(df.columns, null_row))
-                sheet_info["null_counts"] = {
-                    col: count for col, count in all_null_counts.items() if count < len(df)
-                }
-                fully_null_count = len(all_null_counts) - len(sheet_info["null_counts"])
-                if fully_null_count > 0:
-                    sheet_info["fully_null_columns"] = fully_null_count
-            else:
-                sheet_info["null_counts"] = {col: 0 for col in df.columns}
+            # Potential header detection for non-tabular sheets
+            if no_header:
+                potential = _detect_potential_headers(df)
+                if potential:
+                    sheet_info["potential_headers"] = potential
 
-        # Sample data (head + tail)
+        # Sample data (head + tail) — sparse dict format to reduce token waste
         capped_sample = min(sample_rows, MAX_SAMPLE_ROWS)
         if capped_sample > 0 and len(df) > 0:
             date_col_set = {
                 col for col, t in sheet_info.get("column_types", {}).items() if t == "date"
             }
-            head_rows = _df_to_rows(df.head(capped_sample))
-            tail_rows = _df_to_rows(df.tail(capped_sample))
+            head_rows = _df_to_sparse_rows(df.head(capped_sample))
+            tail_rows = _df_to_sparse_rows(df.tail(capped_sample))
+            # Convert Excel serial numbers to ISO dates in sparse dicts
             if date_col_set:
-                head_rows = convert_date_values(head_rows, df.columns, date_col_set)
-                tail_rows = convert_date_values(tail_rows, df.columns, date_col_set)
+                for row in head_rows + tail_rows:
+                    for col in date_col_set:
+                        val = row.get(col)
+                        if isinstance(val, (int, float)):
+                            row[col] = excel_serial_to_isodate(float(val))
             sheet_info["sample"] = {
                 "head": head_rows,
                 "tail": tail_rows,
@@ -305,7 +322,9 @@ def probe_workbook(
             string_cols = [
                 col
                 for col, dtype in zip(df.columns, df.dtypes)
-                if dtype == pl.Utf8 and col not in fully_null_cols
+                if dtype == pl.Utf8
+                and col not in fully_null_cols
+                and null_counts.get(col, 0) < 0.5 * len(df)
             ]
             if string_cols:
                 sheet_info["string_summary"] = _build_string_summary(df, string_cols)
@@ -528,6 +547,88 @@ def _df_to_rows(df: pl.DataFrame) -> list[list[Any]]:
     return result
 
 
+def _is_numeric_string(val: str) -> bool:
+    """Return True if the string represents a number (e.g. '0', '71847.38', '-5')."""
+    try:
+        float(val.replace(",", ""))
+        return True
+    except (ValueError, AttributeError):
+        return False
+
+
+def _detect_potential_headers(df: pl.DataFrame, max_rows: int = 10) -> list[dict[str, Any]]:
+    """Detect rows that look like headers in headerless (non-tabular) data.
+
+    Scans the first *max_rows* rows and returns candidates where ≥30% of
+    columns are non-null AND ≥60% of those non-null cells are short strings
+    (≤20 chars) — the typical signature of month names, column labels, etc.
+    """
+    candidates: list[dict[str, Any]] = []
+    scan_rows = min(max_rows, len(df))
+    columns = df.columns
+
+    for i in range(scan_rows):
+        row = df.row(i)
+        non_null_vals = [
+            (col, val)
+            for col, val in zip(columns, row)
+            if val is not None and not (isinstance(val, float) and val != val)
+        ]
+
+        if not non_null_vals:
+            continue
+
+        # At least 30% of columns must be non-null
+        if len(non_null_vals) / len(columns) < 0.3:
+            continue
+
+        # At least 60% of non-null cells must be short non-numeric strings
+        # (headers are text labels like "Dec", "% sales", not "0" or "71847.38")
+        short_strings = sum(
+            1
+            for _, val in non_null_vals
+            if isinstance(val, str) and len(val) <= 20 and not _is_numeric_string(val)
+        )
+        if short_strings / len(non_null_vals) < 0.6:
+            continue
+
+        # Build sparse dict of values
+        values: dict[str, Any] = {}
+        for col, val in non_null_vals:
+            if hasattr(val, "isoformat"):
+                values[col] = val.isoformat()
+            else:
+                values[col] = val
+        # Row number is 1-based (Excel convention for no_header mode)
+        candidates.append({"row": i + 1, "values": values})
+
+    return candidates
+
+
+def _df_to_sparse_rows(df: pl.DataFrame) -> list[dict[str, Any]]:
+    """Convert DataFrame rows to sparse dicts — only non-null cells are included.
+
+    This drastically reduces token output for wide sheets with many null
+    separator columns (e.g. 46 elements → 5 keys).
+    """
+    columns = df.columns
+    rows = df.rows()
+    result: list[dict[str, Any]] = []
+    for row in rows:
+        sparse: dict[str, Any] = {}
+        for col_name, val in zip(columns, row):
+            if val is None:
+                continue
+            if isinstance(val, float) and val != val:
+                continue  # NaN → skip
+            if hasattr(val, "isoformat"):
+                sparse[col_name] = val.isoformat()
+            else:
+                sparse[col_name] = val
+        result.append(sparse)
+    return result
+
+
 def _build_numeric_summary(df: pl.DataFrame, numeric_cols: list[str]) -> dict[str, Any]:
     """Build numeric summary statistics using Polars."""
     summary: dict[str, Any] = {}
@@ -553,8 +654,8 @@ def _build_string_summary(df: pl.DataFrame, string_cols: list[str]) -> dict[str,
         if len(series) == 0:
             continue
         n_unique = series.n_unique()
-        # Get top values by frequency (up to 10)
-        top = series.value_counts(sort=True).head(10).get_column(col).to_list()
+        # Get top values by frequency (up to 5)
+        top = series.value_counts(sort=True).head(5).get_column(col).to_list()
         summary[col] = {
             "unique": n_unique,
             "top_values": top,
