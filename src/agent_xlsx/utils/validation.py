@@ -34,12 +34,22 @@ _RANGE_RE = re.compile(
 )
 
 
+def _normalise_shell_ref(ref: str) -> str:
+    """Normalise shell-escaped cell/range references.
+
+    Zsh escapes ``!`` to ``\\!`` even in single-quoted strings when passed
+    through subprocess chains (e.g. ``uv run``).  This strips the escape so
+    ``2022\\!B1`` becomes ``2022!B1``.
+    """
+    return ref.replace("\\!", "!")
+
+
 def parse_range(range_str: str) -> dict[str, str | None]:
     """Parse an Excel range string like 'Sheet1!A1:C10'.
 
     Returns dict with keys: sheet, start, end (end may be None for single cell).
     """
-    m = _RANGE_RE.match(range_str.strip())
+    m = _RANGE_RE.match(_normalise_shell_ref(range_str).strip())
     if not m:
         raise RangeInvalidError(range_str)
     return {

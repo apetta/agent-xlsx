@@ -10,14 +10,14 @@ import typer
 from agent_xlsx.cli import app
 from agent_xlsx.formatters import json_formatter
 from agent_xlsx.utils.errors import AgentExcelError, handle_error
-from agent_xlsx.utils.validation import validate_file
+from agent_xlsx.utils.validation import _normalise_shell_ref, validate_file
 
 
 @app.command("write")
 @handle_error
 def write_cmd(
     file: str = typer.Argument(..., help="Path to the Excel file"),
-    cell: str = typer.Argument(..., help="Cell reference (e.g. 'A1' or 'A1:C3')"),
+    cell: str = typer.Argument(..., help="Cell reference (e.g. 'A1', '2022!A1', or 'Sheet1!A1:C3')"),
     value: Optional[str] = typer.Argument(None, help="Value to write (for single cell)"),
     formula: bool = typer.Option(False, "--formula", help="Treat value as a formula"),
     json: Optional[str] = typer.Option(None, "--json", help="JSON array data for range write"),
@@ -37,6 +37,14 @@ def write_cmd(
 ) -> None:
     """Write values or formulas to specific cells or ranges."""
     path = validate_file(file)
+
+    # Parse Sheet!Cell syntax (e.g. "2022!B1" → sheet=2022, cell=B1)
+    cell = _normalise_shell_ref(cell)
+    if "!" in cell:
+        parts = cell.split("!", 1)
+        if not sheet:  # --sheet flag takes precedence
+            sheet = parts[0]
+        cell = parts[1]
 
     from agent_xlsx.adapters import openpyxl_adapter as oxl
 

@@ -8,14 +8,14 @@ import typer
 from agent_xlsx.cli import app
 from agent_xlsx.formatters import json_formatter
 from agent_xlsx.utils.errors import AgentExcelError, handle_error
-from agent_xlsx.utils.validation import validate_file
+from agent_xlsx.utils.validation import _normalise_shell_ref, validate_file
 
 
 @app.command("format")
 @handle_error
 def format_cmd(
     file: str = typer.Argument(..., help="Path to the Excel file"),
-    cell: str = typer.Argument(..., help="Cell or range reference (e.g. 'A1' or 'A1:D10')"),
+    cell: str = typer.Argument(..., help="Cell or range reference (e.g. 'A1', '2022!A1', or 'Sheet1!A1:D10')"),
     read: bool = typer.Option(False, "--read", help="Read formatting at the cell"),
     font: Optional[str] = typer.Option(
         None,
@@ -52,6 +52,8 @@ def format_cmd(
 ) -> None:
     """Read or apply cell formatting."""
     path = validate_file(file)
+
+    cell = _normalise_shell_ref(cell)
 
     from agent_xlsx.adapters import openpyxl_adapter as oxl
 

@@ -14,7 +14,7 @@ from agent_xlsx.formatters import json_formatter
 from agent_xlsx.formatters.token_optimizer import cap_list, summarise_formulas
 from agent_xlsx.utils.constants import MAX_FORMULA_CELLS, MAX_LOCATIONS
 from agent_xlsx.utils.errors import handle_error
-from agent_xlsx.utils.validation import parse_range, validate_file
+from agent_xlsx.utils.validation import _normalise_shell_ref, parse_range, validate_file
 
 
 @app.command("inspect")
@@ -41,7 +41,7 @@ def inspect_cmd(
     conditional: Optional[str] = typer.Option(
         None,
         "--conditional",
-        help="Inspect conditional formatting for a range",
+        help="Inspect conditional formatting for a sheet",
     ),
     validation: Optional[str] = typer.Option(
         None,
@@ -56,6 +56,11 @@ def inspect_cmd(
 ) -> None:
     """Detailed inspection of workbook elements."""
     path = validate_file(file)
+
+    if format_cell:
+        format_cell = _normalise_shell_ref(format_cell)
+    if conditional:
+        conditional = _normalise_shell_ref(conditional)
 
     from agent_xlsx.adapters import openpyxl_adapter as oxl
 
