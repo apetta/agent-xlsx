@@ -5,9 +5,9 @@ agent-xlsx uses three rendering engines for `screenshot`, `objects`, and `recalc
 ## Auto-Detection Priority
 
 ```
-1. Excel (xlwings)   — Microsoft Excel installed
-   ↓ not found
-2. Aspose.Cells      — aspose-cells-python installed
+1. Aspose.Cells      — included as a core dependency (always available)
+   ↓ not installed / unavailable
+2. Excel (xlwings)   — Microsoft Excel installed
    ↓ not found
 3. LibreOffice       — soffice on PATH or standard locations
    ↓ not found
@@ -34,13 +34,9 @@ Auto-fits columns before capture (`sheet.autofit('c')`) to prevent `####` displa
 - **Speed:** Fast
 - **Commands:** screenshot, objects, recalc
 
-**Installation:**
+Aspose.Cells is included as a core dependency of agent-xlsx — no separate install required.
 
-```bash
-uv pip install aspose-cells-python
-```
-
-**Licensing:** Aspose.Cells is a **proprietary, commercially licensed** library — not covered by agent-xlsx's Apache-2.0 licence. Evaluation mode works but adds watermarks and has a 100-file-per-session limit.
+**Licensing:** Aspose.Cells is a **proprietary, commercially licensed** library by [Aspose Pty Ltd](https://www.aspose.com/) — **not** covered by agent-xlsx's Apache-2.0 licence. Users are subject to [Aspose's EULA](https://company.aspose.com/legal/eula). A [separate commercial licence](https://purchase.aspose.com/pricing/cells/python-java) is required for production use without watermarks. Evaluation mode works but adds watermarks and has a 100-file-per-session limit.
 
 **Setting a licence:**
 

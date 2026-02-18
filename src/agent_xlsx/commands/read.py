@@ -11,6 +11,7 @@ from agent_xlsx.adapters.polars_adapter import get_sheet_names, read_exact_range
 from agent_xlsx.cli import app
 from agent_xlsx.formatters.json_formatter import output
 from agent_xlsx.utils.constants import DEFAULT_LIMIT, DEFAULT_OFFSET, MAX_READ_ROWS
+from agent_xlsx.utils.dataframe import apply_compact
 from agent_xlsx.utils.dates import convert_date_values, detect_date_columns
 from agent_xlsx.utils.errors import SheetNotFoundError, handle_error
 from agent_xlsx.utils.validation import (
@@ -56,9 +57,9 @@ def read(
         "Use for non-tabular sheets like P&L reports and dashboards.",
     ),
     compact: bool = typer.Option(
-        False,
-        "--compact",
-        help="Drop fully-null columns from output to reduce token waste.",
+        True,
+        "--compact/--no-compact",
+        help="Drop fully-null columns from output to reduce token waste (default: on).",
     ),
     all_sheets: bool = typer.Option(
         False,
@@ -82,7 +83,7 @@ def read(
     effective_limit = min(limit, MAX_READ_ROWS)
 
     if formulas:
-        _read_with_formulas(path, range_, sheet, effective_limit, offset)
+        _read_with_formulas(path, range_, sheet, effective_limit, offset, compact)
         return
 
     # --- Determine ranges to read ---
@@ -124,7 +125,7 @@ def read(
                     df = _read_single_range(
                         path, target_sheet, ri, no_header, effective_limit, offset
                     )
-                    df = _apply_compact(df, compact)
+                    df = apply_compact(df, compact)
                     if sort and sort in df.columns:
                         df = df.sort(sort, descending=descending)
 
@@ -152,7 +153,7 @@ def read(
                     n_rows=effective_limit,
                     no_header=no_header,
                 )
-                df = _apply_compact(df, compact)
+                df = apply_compact(df, compact)
                 if sort and sort in df.columns:
                     df = df.sort(sort, descending=descending)
 
@@ -194,7 +195,7 @@ def read(
             no_header=no_header,
         )
 
-    df = _apply_compact(df, compact)
+    df = apply_compact(df, compact)
 
     if sort and sort in df.columns:
         df = df.sort(sort, descending=descending)
@@ -268,14 +269,6 @@ def _read_single_range(
     )
 
 
-def _apply_compact(df: pl.DataFrame, compact: bool) -> pl.DataFrame:
-    """Drop fully-null columns when compact mode is enabled."""
-    if not compact or len(df) == 0:
-        return df
-    non_null_cols = [col for col in df.columns if df[col].null_count() < len(df)]
-    return df.select(non_null_cols) if non_null_cols else df
-
-
 def _apply_date_conversion(
     rows: list[list],
     df: pl.DataFrame,
@@ -299,6 +292,7 @@ def _read_with_formulas(
     sheet: Optional[str],
     limit: int,
     offset: int,
+    compact: bool = True,
 ) -> None:
     """Read with formula strings via openpyxl (slower path)."""
     start = time.perf_counter()
@@ -354,6 +348,10 @@ def _read_with_formulas(
             )
 
     wb.close()
+
+    # Strip blank cells (both value and formula null) in compact mode
+    if compact:
+        cells = [c for c in cells if c["value"] is not None or c["formula"] is not None]
 
     elapsed_ms = round((time.perf_counter() - start) * 1000, 1)
 

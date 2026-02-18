@@ -7,9 +7,14 @@ from typing import Any, Optional
 
 import typer
 
-from agent_xlsx.adapters.polars_adapter import get_sheet_names, read_sheet_data
+from agent_xlsx.adapters.polars_adapter import (
+    _suppress_stderr,
+    get_sheet_names,
+    read_sheet_data,
+)
 from agent_xlsx.cli import app
 from agent_xlsx.formatters.json_formatter import output
+from agent_xlsx.utils.dataframe import apply_compact
 from agent_xlsx.utils.errors import SheetNotFoundError, handle_error
 from agent_xlsx.utils.validation import validate_file
 
@@ -26,6 +31,16 @@ def export(
         help="Output format: json, csv, markdown",
     ),
     output_path: Optional[str] = typer.Option(None, "--output", "-o", help="Output file path"),
+    no_header: bool = typer.Option(
+        False,
+        "--no-header",
+        help="Treat row 1 as data, use column letters (A, B, C) as headers.",
+    ),
+    compact: bool = typer.Option(
+        True,
+        "--compact/--no-compact",
+        help="Drop fully-null columns from output to reduce token waste (default: on).",
+    ),
 ) -> None:
     """Export a sheet to JSON, CSV, or Markdown format.
 
@@ -42,7 +57,10 @@ def export(
         if target_sheet not in available:
             raise SheetNotFoundError(target_sheet, available)
 
-    df = read_sheet_data(filepath=path, sheet_name=target_sheet)
+    with _suppress_stderr():
+        df = read_sheet_data(filepath=path, sheet_name=target_sheet, no_header=no_header)
+
+    df = apply_compact(df, compact)
 
     elapsed_ms = round((time.perf_counter() - start) * 1000, 1)
 

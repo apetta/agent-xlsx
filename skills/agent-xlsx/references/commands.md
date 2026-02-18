@@ -66,7 +66,7 @@ agent-xlsx read <file> [range] [flags]
 | `--formulas` | | bool | false | Return formula strings (openpyxl fallback) |
 | `--format` | `-f` | str | json | Output format: json, csv |
 | `--no-header` | | bool | false | Treat row 1 as data, columns as Excel letters |
-| `--compact` | | bool | false | Drop fully-null columns from output (strips separator columns) |
+| `--compact/--no-compact` | | bool | **true** | Drop fully-null columns from output (strips separator columns). Use `--no-compact` to preserve all columns |
 | `--all-sheets` | | bool | false | Read the same range(s) from every sheet |
 
 **Range** is positional: `"A1:F50"` or `"Sheet1!A1:F50"`. Comma-separated for multi-range: `"Sheet1!A1:C10,E1:G10,H1:J10"` (sheet prefix carries forward).
@@ -97,7 +97,7 @@ agent-xlsx search <file> <query> [flags]
 | `--in-formulas` | | bool | false | Search formula strings (openpyxl fallback) |
 | `--no-header` | | bool | false | Treat row 1 as data, columns as Excel letters |
 
-**Output:** `results[].{sheet, cell, value, row, col}` — max 25 results. Check `truncated` field.
+**Output:** `results[].{sheet, column, cell, value, row}` — `column` is always an Excel letter (A, B, H, etc.). Max 25 results. Check `truncated` field.
 
 ---
 
@@ -114,6 +114,8 @@ agent-xlsx export <file> [flags]
 | `--sheet` | `-s` | str | first | Target sheet |
 | `--format` | `-f` | str | json | Format: json, csv, markdown |
 | `--output` | `-o` | str | stdout | Write to file |
+| `--no-header` | | bool | false | Treat row 1 as data, columns as Excel letters |
+| `--compact/--no-compact` | | bool | **true** | Drop fully-null columns from output. Use `--no-compact` to preserve all columns |
 
 ---
 
@@ -127,7 +129,7 @@ agent-xlsx overview <file> [flags]
 
 | Flag | Alias | Type | Default | Description |
 |------|-------|------|---------|-------------|
-| `--include-formulas` | | bool | false | Add formula summary per sheet |
+| `--include-formulas` | | bool | false | Add deduplicated formula patterns per sheet (up to 10 unique patterns with counts) |
 | `--include-formatting` | | bool | false | Add formatting summary |
 
 **Output:** `sheets[].{name, row_count, col_count, data_rows, data_cols}`, `named_ranges`, `tables`, `defined_names`

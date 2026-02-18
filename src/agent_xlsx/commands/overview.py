@@ -1,5 +1,6 @@
 """Structural metadata overview using openpyxl for formula/chart/VBA detection."""
 
+import re
 import time
 from pathlib import Path
 
@@ -7,7 +8,7 @@ import typer
 
 from agent_xlsx.cli import app
 from agent_xlsx.formatters.json_formatter import output
-from agent_xlsx.utils.constants import MAX_FORMULA_CELLS, VBA_EXTENSIONS
+from agent_xlsx.utils.constants import MAX_FORMULA_PATTERNS, VBA_EXTENSIONS
 from agent_xlsx.utils.errors import handle_error
 from agent_xlsx.utils.validation import file_size_bytes, validate_file
 
@@ -67,26 +68,33 @@ def overview(
 
         # Formula detection — scan cells for strings starting with '='
         formula_count = 0
-        sample_formulas: list[dict] = []
+        # Pattern deduplication: normalise row numbers to group repetitive formulas
+        pattern_map: dict[str, dict] = {}  # normalised_pattern → info dict
         if ws.max_row and ws.max_column:
             for row in ws.iter_rows(values_only=False):
                 for cell in row:
                     if cell.value and isinstance(cell.value, str) and cell.value.startswith("="):
                         formula_count += 1
-                        if include_formulas and len(sample_formulas) < MAX_FORMULA_CELLS:
-                            sample_formulas.append(
-                                {
-                                    "cell": cell.coordinate,
-                                    "formula": cell.value,
+                        if include_formulas and len(pattern_map) < MAX_FORMULA_PATTERNS:
+                            formula_text = cell.value
+                            # Normalise by stripping row numbers → pattern shape
+                            normalised = re.sub(r"\d+", "{N}", formula_text)
+                            if normalised not in pattern_map:
+                                pattern_map[normalised] = {
+                                    "pattern": normalised,
+                                    "example_cell": cell.coordinate,
+                                    "example": formula_text,
+                                    "count": 1,
                                 }
-                            )
+                            else:
+                                pattern_map[normalised]["count"] += 1
 
         sheet_info["has_formulas"] = formula_count > 0
         sheet_info["formula_count"] = formula_count
         total_formula_count += formula_count
 
-        if include_formulas and sample_formulas:
-            sheet_info["sample_formulas"] = sample_formulas
+        if include_formulas and pattern_map:
+            sheet_info["sample_formulas"] = list(pattern_map.values())
 
         # Charts
         chart_count = len(ws._charts) if hasattr(ws, "_charts") else 0

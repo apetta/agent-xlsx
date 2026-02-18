@@ -9,16 +9,9 @@
 agent-xlsx gives LLM agents the same depth of understanding of Excel workbooks that a human gets by opening them in Excel — structure, data, formatting, charts, formulas, VBA, and visual layout — all accessible through a single CLI that returns token-efficient JSON.
 
 ```bash
-# Profile an entire workbook in <10ms
 agent-xlsx probe report.xlsx
-
-# Read any range as structured JSON
 agent-xlsx read report.xlsx "Sales!A1:F50"
-
-# Search across all sheets
 agent-xlsx search report.xlsx "revenue" --ignore-case
-
-# Full-fidelity visual capture (charts, shapes, conditional formatting)
 agent-xlsx screenshot report.xlsx
 ```
 
@@ -49,8 +42,10 @@ uvx agent-xlsx probe report.xlsx
 ### Global install
 
 ```bash
-uv tool install agent-xlsx    # or: pipx install agent-xlsx
+uv tool install agent-xlsx
 ```
+
+Also available via `pipx install agent-xlsx`.
 
 ### pip
 
@@ -68,32 +63,38 @@ npx skills add apetta/agent-xlsx
 
 Compatible with [Claude Code](https://claude.ai/code), [Cursor](https://cursor.com), [Gemini CLI](https://geminicli.com), and [20+ other agents](https://agentskills.io).
 
-### Optional: Aspose.Cells (cross-platform rendering, no Excel/LibreOffice needed)
+### Aspose.Cells — third-party licence required
 
-> **Note:** [Aspose.Cells for Python](https://pypi.org/project/aspose-cells-python/) is a **proprietary, commercially licensed** library, not covered by this project's Apache-2.0 licence. Users who install it are subject to [Aspose's EULA](https://company.aspose.com/legal/eula).
+agent-xlsx includes [Aspose.Cells for Python](https://pypi.org/project/aspose-cells-python/) as a dependency for cross-platform screenshot, recalc, and objects support.
 
-```bash
-# Adds screenshot, recalc, and objects support on any platform
-uv add --optional aspose aspose-cells-python
-```
+> **Important:** Aspose.Cells is a **proprietary, commercially licensed** library by [Aspose Pty Ltd](https://www.aspose.com/). It is **not** covered by this project's Apache-2.0 licence. By installing agent-xlsx you also install Aspose.Cells and agree to [Aspose's EULA](https://company.aspose.com/legal/eula). A [separate Aspose licence](https://purchase.aspose.com/pricing/cells/python-java) is required for production use without watermarks.
 
-Without a licence, Aspose runs in **evaluation mode** (watermarks on rendered images, 100-file-per-session limit). Set a licence via:
+Without a licence, Aspose runs in **evaluation mode** (watermarks on rendered images, 100-file-per-session limit). To remove watermarks, purchase and set an Aspose licence:
 
 ```bash
 agent-xlsx license --set /path/to/Aspose.Cells.lic
-# Or: export ASPOSE_LICENSE_PATH=/path/to/Aspose.Cells.lic
+```
+
+Or via environment variable:
+
+```bash
+export ASPOSE_LICENSE_PATH=/path/to/Aspose.Cells.lic
 ```
 
 ### Optional: LibreOffice (free fallback for `screenshot` and `recalc`)
 
+**macOS:**
 ```bash
-# macOS
 brew install --cask libreoffice
+```
 
-# Ubuntu / Debian / ECS
+**Ubuntu / Debian / ECS:**
+```bash
 apt install libreoffice-calc
+```
 
-# Alpine
+**Alpine:**
+```bash
 apk add libreoffice-calc
 ```
 
@@ -105,20 +106,28 @@ All other commands (probe, read, search, export, write, format, inspect, overvie
 
 The recommended agent workflow is **probe first, then drill down**:
 
+1. **Profile** the workbook — lean skeleton in <10ms:
 ```bash
-# 1. Profile the workbook — lean skeleton in <10ms
 agent-xlsx probe workbook.xlsx
+```
 
-# 2. Drill into types / samples if needed
+2. **Drill into types / samples** if needed:
+```bash
 agent-xlsx probe workbook.xlsx --types --sample 3
+```
 
-# 3. Visual understanding — see formatting, charts, layout
+3. **Visual understanding** — see formatting, charts, layout:
+```bash
 agent-xlsx screenshot workbook.xlsx
+```
 
-# 4. Read specific data
+4. **Read specific data:**
+```bash
 agent-xlsx read workbook.xlsx --sheet Sales "A1:F100"
+```
 
-# 5. Inspect metadata — formulas, charts, merged cells, conditional formatting
+5. **Inspect metadata** — formulas, charts, merged cells, conditional formatting:
+```bash
 agent-xlsx inspect workbook.xlsx --sheet Sales
 ```
 
@@ -131,13 +140,22 @@ agent-xlsx inspect workbook.xlsx --sheet Sales
 The **first command an agent should run**. Lean by default — returns sheet names, dimensions, and headers with zero data parsing (<10ms). Use flags to opt into richer detail.
 
 ```bash
-agent-xlsx probe data.xlsx                    # Lean: sheet names, dims, headers only
-agent-xlsx probe data.xlsx --types            # Add column types + null counts
-agent-xlsx probe data.xlsx --sample 3         # Add 3 head + 3 tail rows
-agent-xlsx probe data.xlsx --stats            # Full stats (implies --types)
-agent-xlsx probe data.xlsx --full             # Everything: types + sample(3) + stats
-agent-xlsx probe data.xlsx --sheet "Sales"    # Single sheet
+agent-xlsx probe data.xlsx
+agent-xlsx probe data.xlsx --types
+agent-xlsx probe data.xlsx --sample 3
+agent-xlsx probe data.xlsx --stats
+agent-xlsx probe data.xlsx --full
+agent-xlsx probe data.xlsx --sheet "Sales"
 ```
+
+| Flag | Effect |
+|------|--------|
+| *(none)* | Sheet names, dims, headers only |
+| `--types` | Add column types + null counts |
+| `--sample N` | Add N head + N tail rows |
+| `--stats` | Full stats (implies `--types`) |
+| `--full` | Shorthand for `--types --sample 3 --stats` |
+| `--sheet` | Target a single sheet |
 
 **Default output** (~250 tokens for 6 sheets):
 ```json
@@ -233,11 +251,11 @@ agent-xlsx overview data.xlsx --include-formatting
 Read data from any range or sheet. Default path uses Polars + fastexcel for speed. Use `--formulas` to fall back to openpyxl for formula string extraction.
 
 ```bash
-agent-xlsx read data.xlsx                          # First sheet, first 100 rows
-agent-xlsx read data.xlsx "A1:F50"                 # Specific range
-agent-xlsx read data.xlsx --sheet Sales "B2:G100"  # Sheet + range
-agent-xlsx read data.xlsx --limit 500 --offset 100 # Pagination
-agent-xlsx read data.xlsx --formulas               # Include formula strings
+agent-xlsx read data.xlsx
+agent-xlsx read data.xlsx "A1:F50"
+agent-xlsx read data.xlsx --sheet Sales "B2:G100"
+agent-xlsx read data.xlsx --limit 500 --offset 100
+agent-xlsx read data.xlsx --formulas
 agent-xlsx read data.xlsx --sort amount --descending
 ```
 
@@ -265,8 +283,8 @@ Search for values across all sheets. Supports regex and case-insensitive matchin
 agent-xlsx search data.xlsx "revenue"
 agent-xlsx search data.xlsx "rev.*" --regex
 agent-xlsx search data.xlsx "stripe" --ignore-case
-agent-xlsx search data.xlsx "SUM(" --in-formulas    # Search formula strings
 agent-xlsx search data.xlsx "error" --sheet Summary
+agent-xlsx search data.xlsx "SUM(" --in-formulas
 ```
 
 ```json
@@ -287,30 +305,29 @@ agent-xlsx search data.xlsx "error" --sheet Summary
 Deep inspection of workbook elements: formulas, charts, merged cells, named ranges, comments, conditional formatting, data validation, and hyperlinks.
 
 ```bash
-agent-xlsx inspect data.xlsx --sheet Sales             # Sheet-level summary
+agent-xlsx inspect data.xlsx --sheet Sales
 agent-xlsx inspect data.xlsx --sheet Sales --range A1:C10
-agent-xlsx inspect data.xlsx --names                    # Named ranges
-agent-xlsx inspect data.xlsx --charts                   # Chart metadata
-agent-xlsx inspect data.xlsx --vba                      # VBA module summary
-agent-xlsx inspect data.xlsx --comments                 # Cell comments
-agent-xlsx inspect data.xlsx --conditional "A1:Z100"    # Conditional formatting rules
-agent-xlsx inspect data.xlsx --validation Sales         # Data validation rules
-agent-xlsx inspect data.xlsx --hyperlinks Sales         # Hyperlinks
+agent-xlsx inspect data.xlsx --names
+agent-xlsx inspect data.xlsx --charts
+agent-xlsx inspect data.xlsx --comments
+agent-xlsx inspect data.xlsx --conditional "A1:Z100"
+agent-xlsx inspect data.xlsx --validation Sales
+agent-xlsx inspect data.xlsx --hyperlinks Sales
 ```
 
 ### `screenshot` — Full-Fidelity HD Visual Capture
 
-Export workbook sheets as HD PNG images. Three rendering engines auto-detected in order: **Excel** (xlwings, highest fidelity) → **Aspose.Cells** (cross-platform, no external app) → **LibreOffice** (free fallback). Use `--engine` to force a specific backend.
+Export workbook sheets as HD PNG images. Three rendering engines auto-detected in order: **Aspose.Cells** (cross-platform, included) → **Excel** (xlwings, highest fidelity) → **LibreOffice** (free fallback). Use `--engine` to force a specific backend.
 
 ```bash
-agent-xlsx screenshot data.xlsx                            # All sheets as HD PNG
-agent-xlsx screenshot data.xlsx --sheet Summary            # Specific sheet
-agent-xlsx screenshot data.xlsx --sheet "Sales,Summary"    # Multiple sheets
-agent-xlsx screenshot data.xlsx "Sales!A1:F20"             # Range capture
-agent-xlsx screenshot data.xlsx --engine aspose            # Force Aspose (cross-platform)
-agent-xlsx screenshot data.xlsx --dpi 300                  # Higher resolution (default: 200)
-agent-xlsx screenshot data.xlsx --output ./shots/          # Custom output directory
-agent-xlsx screenshot data.xlsx --timeout 60               # Increase timeout (LibreOffice only)
+agent-xlsx screenshot data.xlsx
+agent-xlsx screenshot data.xlsx --sheet Summary
+agent-xlsx screenshot data.xlsx --sheet "Sales,Summary"
+agent-xlsx screenshot data.xlsx "Sales!A1:F20"
+agent-xlsx screenshot data.xlsx --engine aspose
+agent-xlsx screenshot data.xlsx --dpi 300
+agent-xlsx screenshot data.xlsx --output ./shots/
+agent-xlsx screenshot data.xlsx --timeout 60
 ```
 
 **Single sheet/range output:**
@@ -347,9 +364,9 @@ agent-xlsx screenshot data.xlsx --timeout 60               # Increase timeout (L
 Export entire sheets to JSON, CSV, or Markdown.
 
 ```bash
-agent-xlsx export data.xlsx --format csv               # CSV to stdout
-agent-xlsx export data.xlsx --format markdown           # Markdown table
-agent-xlsx export data.xlsx --format json               # JSON array
+agent-xlsx export data.xlsx --format csv
+agent-xlsx export data.xlsx --format markdown
+agent-xlsx export data.xlsx --format json
 agent-xlsx export data.xlsx --format csv --output out.csv
 agent-xlsx export data.xlsx --format csv --sheet Sales
 ```
@@ -359,24 +376,30 @@ agent-xlsx export data.xlsx --format csv --sheet Sales
 Write values or formulas to cells. Supports single cells, ranges (via JSON), and CSV file imports.
 
 ```bash
-agent-xlsx write data.xlsx "A1" "Hello"                          # Single value
-agent-xlsx write data.xlsx "A1" "=SUM(B1:B100)" --formula        # Formula
+agent-xlsx write data.xlsx "A1" "Hello"
+agent-xlsx write data.xlsx "A1" "=SUM(B1:B100)" --formula
 agent-xlsx write data.xlsx "A1:C3" --json '[[1,2,3],[4,5,6],[7,8,9]]'
 agent-xlsx write data.xlsx "A1" --from-csv import.csv
 agent-xlsx write data.xlsx "A1" "42" --number-format "0.00%"
-agent-xlsx write data.xlsx "A1" "Hello" --output new_file.xlsx   # Preserve original
 agent-xlsx write data.xlsx "A1" "Hello" --sheet Summary
+agent-xlsx write data.xlsx "A1" "Hello" --output new_file.xlsx
 ```
+
+Use `--output` to write to a new file and preserve the original.
 
 ### `format` — Read and Apply Cell Formatting
 
 Read or modify cell formatting: fonts, fills, borders, number formats.
 
-```bash
-# Read formatting
-agent-xlsx format data.xlsx "A1" --read --sheet Sales
+Read formatting:
 
-# Apply formatting
+```bash
+agent-xlsx format data.xlsx "A1" --read --sheet Sales
+```
+
+Apply formatting:
+
+```bash
 agent-xlsx format data.xlsx "A1:D1" --font '{"bold": true, "size": 14}'
 agent-xlsx format data.xlsx "B2:B100" --number-format "#,##0.00"
 agent-xlsx format data.xlsx "A1:D10" --fill '{"color": "FFFF00"}'
@@ -418,21 +441,28 @@ agent-xlsx sheet data.xlsx --unhide "Internal"
 Extract and analyse VBA macros using oletools. Works headless on all platforms without Microsoft Excel.
 
 ```bash
-agent-xlsx vba macros.xlsm --list        # List modules with security summary
-agent-xlsx vba macros.xlsm --read Main   # Read a specific module's code
-agent-xlsx vba macros.xlsm --read-all    # Read all module code
-agent-xlsx vba macros.xlsm --security    # Full security analysis
+agent-xlsx vba macros.xlsm --list
+agent-xlsx vba macros.xlsm --read Main
+agent-xlsx vba macros.xlsm --read-all
+agent-xlsx vba macros.xlsm --security
 ```
 
 ### `recalc` — Formula Recalculation
 
-Scan for formula errors or trigger a full recalculation. Auto-detects engine: Excel → Aspose → LibreOffice.
+Scan for formula errors or trigger a full recalculation. Auto-detects engine: Aspose → Excel → LibreOffice.
+
+Scan for errors (no engine needed):
 
 ```bash
-agent-xlsx recalc data.xlsx --check-only    # Scan for #REF!, #DIV/0!, etc. (no engine needed)
-agent-xlsx recalc data.xlsx                 # Full recalculation
-agent-xlsx recalc data.xlsx --engine aspose # Force Aspose (cross-platform)
-agent-xlsx recalc data.xlsx --timeout 120   # Timeout (LibreOffice only)
+agent-xlsx recalc data.xlsx --check-only
+```
+
+Full recalculation (requires Excel, Aspose, or LibreOffice):
+
+```bash
+agent-xlsx recalc data.xlsx
+agent-xlsx recalc data.xlsx --engine aspose
+agent-xlsx recalc data.xlsx --timeout 120
 ```
 
 ```json
@@ -460,25 +490,25 @@ agent-xlsx uses a **multi-backend architecture**, choosing the fastest backend c
                                   |
       +---------------+-----------+-----------+---------------+
       |               |           |           |               |
-Polars+fastexcel   openpyxl   xlwings    Aspose.Cells   LibreOffice
- (Rust/Calamine)  (Pure Py)  (Excel)    (Cross-plat)    (Headless)
+Polars+fastexcel   openpyxl   Aspose.Cells   xlwings      LibreOffice
+ (Rust/Calamine)  (Pure Py)  (Cross-plat)    (Excel)       (Headless)
 
-  Data reads      Metadata   Screenshots Screenshots    Screenshots
-  Profiling       Formulas   Recalc      Recalc         Recalc
-  Search          Formatting Objects     Objects
+  Data reads      Metadata   Screenshots    Screenshots   Screenshots
+  Profiling       Formulas   Recalc         Recalc        Recalc
+  Search          Formatting Objects        Objects
   Export          Writes
 
   + oletools (VBA extraction & analysis)
 ```
 
-**Rendering engine auto-detection**: Excel (xlwings) → Aspose.Cells → LibreOffice. Use `--engine` to force a specific backend.
+**Rendering engine auto-detection**: Aspose.Cells → Excel (xlwings) → LibreOffice. Use `--engine` to force a specific backend.
 
 | Backend | Role | Speed | Used by |
 |---------|------|-------|---------|
 | **Polars + fastexcel** | Primary data engine | 7-10x faster than openpyxl | `probe`, `read`, `search`, `export` |
 | **openpyxl** | Metadata + writes | Baseline | `overview`, `inspect`, `write`, `format`, `sheet` |
+| **Aspose.Cells** ([separately licensed](https://company.aspose.com/legal/eula)) | Cross-platform rendering (default) | ~1-3s per sheet | `screenshot`, `recalc`, `objects` |
 | **xlwings** (Excel) | Highest-fidelity rendering | ~2s per sheet | `screenshot`, `recalc`, `objects`, `vba --run` |
-| **Aspose.Cells** (optional) | Cross-platform rendering | ~1-3s per sheet | `screenshot`, `recalc`, `objects` |
 | **LibreOffice + PyMuPDF** | Free rendering fallback | ~3s per sheet | `screenshot`, `recalc` |
 | **oletools** | VBA extraction | Fast | `vba` |
 
@@ -504,37 +534,27 @@ openpyxl creates a Python object for every cell. For a 100K-row workbook, that's
 
 agent-xlsx is designed for headless deployment in agentic infrastructure — no GUI, no Excel installation, no Docker requirement.
 
-### AWS ECS / Container (with Aspose — lightweight, no LibreOffice)
+### AWS ECS / Container
+
+Aspose.Cells is included as a dependency (see [licence note](#aspose-cells--third-party-licence-required)). Add system fonts for rendered output on Linux:
 
 ```dockerfile
 FROM python:3.12-slim
 
-# Aspose system deps for rendering on Linux
 RUN apt-get update && \
     apt-get install -y --no-install-recommends libgdiplus libfontconfig1 fonts-liberation && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-RUN pip install agent-xlsx aspose-cells-python
-
-# Optional: set Aspose licence
-# COPY Aspose.Cells.lic /app/
-# ENV ASPOSE_LICENSE_PATH=/app/Aspose.Cells.lic
-
+RUN pip install agent-xlsx
 RUN agent-xlsx --help
 ```
 
-### AWS ECS / Container (with LibreOffice — free, larger image)
+Optionally add LibreOffice as a fallback rendering engine:
 
 ```dockerfile
-FROM python:3.12-slim
-
 RUN apt-get update && \
     apt-get install -y --no-install-recommends libreoffice-calc && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
-
-RUN pip install agent-xlsx
-
-RUN agent-xlsx --help
 ```
 
 ### MCP Tool Server
@@ -599,16 +619,23 @@ The Polars + fastexcel backend maintains sub-50ms response times even on workboo
 
 ## Development
 
+Clone and install:
+
 ```bash
-# Clone and install
 git clone https://github.com/apetta/agent-xlsx.git
 cd agent-xlsx
 uv sync
+```
 
-# Run commands
+Run commands:
+
+```bash
 uv run agent-xlsx probe sample_data.xlsx
+```
 
-# Lint
+Lint:
+
+```bash
 uv run ruff check src/
 uv run ruff format src/
 ```
@@ -656,4 +683,6 @@ src/agent_xlsx/
 
 ## Licence
 
-Apache-2.0 — see [LICENSE](LICENSE) for details.
+This project is licensed under **Apache-2.0** — see [LICENSE](LICENSE) for details.
+
+**Third-party notice:** agent-xlsx depends on [Aspose.Cells for Python](https://pypi.org/project/aspose-cells-python/), which is proprietary software by Aspose Pty Ltd, distributed under its own [EULA](https://company.aspose.com/legal/eula). Aspose.Cells is **not** covered by this project's Apache-2.0 licence. A [separate commercial licence](https://purchase.aspose.com/pricing/cells/python-java) from Aspose is required for production use without evaluation watermarks. By installing agent-xlsx you accept responsibility for complying with Aspose's licensing terms.

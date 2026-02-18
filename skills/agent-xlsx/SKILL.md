@@ -5,7 +5,17 @@ description: "Interact with Excel files (.xlsx, .xlsm, .xlsb, .xls, .ods) using 
 
 # agent-xlsx
 
-XLSX CLI for AI agents. Structured JSON to stdout. Polars+fastexcel for data reads (7-10x faster than openpyxl), openpyxl for metadata/writes, three rendering engines for visual capture (Excel → Aspose → LibreOffice), oletools for VBA.
+XLSX CLI for AI agents. Structured JSON to stdout. Polars+fastexcel for data reads (7-10x faster than openpyxl), openpyxl for metadata/writes, three rendering engines for visual capture (Aspose → Excel → LibreOffice), oletools for VBA.
+
+## Running
+
+If `agent-xlsx` is not already installed, use `uvx` for zero-install execution:
+
+```bash
+uvx agent-xlsx probe report.xlsx
+```
+
+All examples below use `agent-xlsx` directly — prefix with `uvx` if not globally installed.
 
 ## Workflow: Progressive Disclosure
 
@@ -49,9 +59,9 @@ agent-xlsx read <file> -s Sales "B2:G100"          # Sheet + range
 agent-xlsx read <file> --limit 500 --offset 100    # Pagination
 agent-xlsx read <file> --sort amount --descending  # Sorted
 agent-xlsx read <file> --formulas                  # Formula strings (slower, openpyxl)
-agent-xlsx read <file> "H54:AT54" -s 2022 --no-header --compact  # Non-tabular, drop null cols
-agent-xlsx read <file> "H54:AT54,H149:AT149" -s 2022 --compact   # Multi-range (1 call)
-agent-xlsx read <file> "H54:AT54" --all-sheets --compact          # Same range, every sheet (1 call)
+agent-xlsx read <file> "H54:AT54" -s 2022 --no-header            # Non-tabular (compact by default)
+agent-xlsx read <file> "H54:AT54,H149:AT149" -s 2022             # Multi-range (1 call)
+agent-xlsx read <file> "H54:AT54" --all-sheets                    # Same range, every sheet (1 call)
 agent-xlsx read <file> "H54:AT54,H149:AT149" --all-sheets         # Multi-range × all sheets
 
 # Search
@@ -61,9 +71,10 @@ agent-xlsx search <file> "stripe" --ignore-case    # Case-insensitive
 agent-xlsx search <file> "SUM(" --in-formulas      # Inside formula strings
 
 # Export
-agent-xlsx export <file> --format csv              # CSV to stdout
+agent-xlsx export <file> --format csv              # CSV to stdout (compact by default)
 agent-xlsx export <file> --format markdown          # Markdown table
 agent-xlsx export <file> --format csv -o out.csv -s Sales
+agent-xlsx export <file> --format markdown --no-header -s 2022  # Non-tabular export
 ```
 
 ### Metadata (openpyxl)
@@ -105,7 +116,7 @@ agent-xlsx sheet <file> --copy "Template" --new-name "Q1"
 agent-xlsx sheet <file> --hide "Internal"
 ```
 
-### Visual & Analysis (3 engines: Excel → Aspose → LibreOffice)
+### Visual & Analysis (3 engines: Aspose → Excel → LibreOffice)
 
 ```bash
 # Screenshot — HD PNG capture (auto-fits columns)
@@ -159,8 +170,8 @@ agent-xlsx screenshot file.xlsx               # Visual understanding
 ```bash
 agent-xlsx probe file.xlsx --types --no-header   # Structure + potential_headers
 agent-xlsx search file.xlsx "Total Sales" --no-header  # Find key rows
-agent-xlsx read file.xlsx "H54:AT54,H149:AT149,H156:AT156" -s 2022 --no-header --compact  # Multi-range
-agent-xlsx read file.xlsx "H54:AT54" --all-sheets --no-header --compact  # Same range across all sheets
+agent-xlsx read file.xlsx "H54:AT54,H149:AT149,H156:AT156" -s 2022 --no-header  # Multi-range (compact by default)
+agent-xlsx read file.xlsx "H54:AT54" --all-sheets --no-header  # Same range across all sheets
 ```
 
 ### Find and extract specific data
@@ -204,13 +215,13 @@ agent-xlsx vba suspect.xlsm --read-all        # Read all code
 
 1. **Always `probe` first** — instant (<10ms), returns sheet names and column_map
 2. **`--no-header` for non-tabular sheets** — P&L reports, dashboards, management accounts. Columns become Excel letters (A, B, C). Use with `probe`, `read`, and `search`
-3. **`--compact` to strip null columns** — drops separator/spacer columns from read output, reducing token waste
+3. **`--compact` on by default** — `read` and `export` drop fully-null columns automatically. Use `--no-compact` to preserve all columns
 4. **Multi-range reads** — comma-separated ranges in one call: `"H54:AT54,H149:AT149"` (sheet prefix carries forward)
 5. **`--all-sheets` for cross-sheet reads** — same range(s) from every sheet in one call
 6. **`--formulas` for formula strings** — default read returns computed values only (Polars, fast). Add `--formulas` for formula text (openpyxl, slower)
 7. **`--in-formulas` for formula search** — default search checks cell values. Add `--in-formulas` to search formula strings
 8. **Dates auto-convert** — Excel serial numbers (44927) become ISO strings ("2023-01-15") automatically
-9. **Check `truncated` field** — results are capped (search: 25, formulas: 50, comments: 20). Narrow query if truncated
+9. **Check `truncated` field** — results are capped (search: 25, formula patterns: 10, comments: 20). Narrow query if truncated
 10. **Range is positional** — `"A1:F50"` or `"Sheet1!A1:F50"` is a positional argument, not a flag. Comma-separated for multi-range
 11. **`-o` preserves original** — write/format save to a new file when `--output` specified
 12. **Screenshot needs an engine** — requires Excel, Aspose, or LibreOffice. See [backends.md](references/backends.md)

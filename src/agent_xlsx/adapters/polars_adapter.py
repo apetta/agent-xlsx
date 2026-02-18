@@ -359,6 +359,16 @@ def probe_workbook(
         "sheets": sheets_result,
     }
 
+    # Auto-suggest --no-header when most headers are unnamed (lean path only)
+    if not no_header and not needs_data:
+        all_headers = [h for s in sheets_result for h in s.get("headers", [])]
+        if all_headers:
+            unnamed_count = sum(1 for h in all_headers if str(h).startswith("__UNNAMED__"))
+            if unnamed_count / len(all_headers) > 0.5:
+                result["hint"] = (
+                    "Most headers are unnamed. Consider --no-header for column-letter headers."
+                )
+
     # Named ranges and tables (fast via fastexcel)
     try:
         defined = reader.defined_names()
@@ -451,7 +461,7 @@ def search_values(
                 matches.append(
                     {
                         "sheet": name,
-                        "column": col,
+                        "column": col_letter,
                         "row": excel_row,
                         "cell": cell_ref,
                         "value": cell_value,
