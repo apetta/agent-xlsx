@@ -18,6 +18,8 @@ from typing import Any
 
 from PIL import Image, ImageChops
 
+from agent_xlsx.utils.validation import index_to_col_letter
+
 # ---------------------------------------------------------------------------
 # LibreOffice discovery
 # ---------------------------------------------------------------------------
@@ -89,11 +91,13 @@ def _prepare_sheet_for_export(
     sheet_name: str,
     range_str: str | None,
     dest_path: Path,
-) -> None:
+) -> str:
     """Prepare an xlsx with only the target sheet, optimised for PDF export.
 
     Uses openpyxl to set print area, zero margins, landscape orientation,
     fitToWidth=1, fitToHeight=0, and removes all other sheets.
+
+    Returns the resolved print-area range string (e.g. ``"A1:AT156"``).
     """
     from openpyxl import load_workbook
     from openpyxl.worksheet.page import PageMargins, PrintPageSetup
@@ -107,9 +111,25 @@ def _prepare_sheet_for_export(
 
     ws = wb[sheet_name]
 
-    # Set print area if range specified
+    # Set print area — compute data extent when no explicit range given
     if range_str:
         ws.print_area = range_str
+        resolved = range_str
+    else:
+        # Scan for actual data extent (max_row/max_column include formatted-but-empty cells)
+        max_data_row = 0
+        max_data_col = 0
+        for cell in ws._cells.values():
+            if cell.value is not None:
+                if cell.row > max_data_row:
+                    max_data_row = cell.row
+                if cell.column > max_data_col:
+                    max_data_col = cell.column
+        max_data_row = max_data_row or 1
+        max_data_col = max_data_col or 1
+        col_letter = index_to_col_letter(max_data_col - 1)
+        resolved = f"A1:{col_letter}{max_data_row}"
+        ws.print_area = resolved
 
     # Optimise for PDF export
     ws.page_margins = PageMargins(left=0.1, right=0.1, top=0.1, bottom=0.1, header=0, footer=0)
@@ -122,6 +142,8 @@ def _prepare_sheet_for_export(
 
     wb.save(str(dest_path))
     wb.close()
+
+    return resolved
 
 
 def _libreoffice_convert(
@@ -234,7 +256,7 @@ def screenshot(
         for target in target_sheets:
             # Prepare single-sheet workbook
             prepared = tmp_path / f"{stem}_{target}.xlsx"
-            _prepare_sheet_for_export(filepath, target, range_str, prepared)
+            resolved_range = _prepare_sheet_for_export(filepath, target, range_str, prepared)
 
             # Convert to PDF
             pdf_file = _libreoffice_convert(
@@ -245,13 +267,26 @@ def screenshot(
                 timeout=timeout,
             )
 
-            # Render PDF to image via PyMuPDF
+            # Render all PDF pages via PyMuPDF and stitch vertically
             doc = fitz.open(str(pdf_file))
-            pix = doc[0].get_pixmap(dpi=dpi)
+            page_images: list[Image.Image] = []
+            for page in doc:
+                pix = page.get_pixmap(dpi=dpi)
+                page_images.append(Image.frombytes("RGB", (pix.width, pix.height), pix.samples))
             doc.close()
 
-            img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
-            cropped = _autocrop_whitespace(img)
+            if len(page_images) == 1:
+                combined = page_images[0]
+            else:
+                total_width = max(im.width for im in page_images)
+                total_height = sum(im.height for im in page_images)
+                combined = Image.new("RGB", (total_width, total_height), (255, 255, 255))
+                y_offset = 0
+                for im in page_images:
+                    combined.paste(im, (0, y_offset))
+                    y_offset += im.height
+
+            cropped = _autocrop_whitespace(combined)
 
             safe_name = target.replace("/", "_").replace("\\", "_").replace(" ", "_")
             if range_str:
@@ -268,6 +303,7 @@ def screenshot(
                     "size_bytes": png_path.stat().st_size,
                     "width": cropped.width,
                     "height": cropped.height,
+                    "resolved_range": resolved_range,
                 }
             )
 
@@ -282,6 +318,7 @@ def screenshot(
             "size_bytes": sheets_result[0]["size_bytes"],
             "width": sheets_result[0]["width"],
             "height": sheets_result[0]["height"],
+            "resolved_range": sheets_result[0]["resolved_range"],
             "dpi": dpi,
             "capture_time_ms": elapsed_ms,
             "engine": "libreoffice",
