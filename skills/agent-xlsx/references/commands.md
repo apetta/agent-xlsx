@@ -33,7 +33,7 @@ agent-xlsx probe <file> [flags]
 |------|-------|------|---------|-------------|
 | `--sheet` | `-s` | str | all | Target specific sheet |
 | `--types` | | bool | false | Add column types + null counts |
-| `--sample` | | int | 0 | Add N head + N tail rows (sparse dict format) |
+| `--sample` | `-n` | int | 0 | Add N head + N tail rows (sparse dict format) |
 | `--stats` | | bool | false | Add numeric/string summaries (implies --types) |
 | `--full` | | bool | false | Shorthand for --types --sample 3 --stats |
 | `--no-header` | | bool | false | Treat row 1 as data, columns as Excel letters (A, B, C). Use for non-tabular sheets (P&L, dashboards) |
@@ -150,8 +150,10 @@ agent-xlsx inspect <file> [flags]
 | `--range` | | str | | Scope to range (requires --sheet) |
 | `--names` | | bool | false | Named ranges only |
 | `--charts` | | bool | false | Chart metadata only |
+| `--vba` | | bool | false | Inspect VBA modules |
+| `--format` | `-f` | str | | Inspect formatting at a cell |
 | `--comments` | | bool | false | Cell comments only (max 20) |
-| `--conditional` | | str | | Conditional formatting rules for range |
+| `--conditional` | | str | | Conditional formatting rules for a sheet |
 | `--validation` | | str | | Data validation rules for sheet |
 | `--hyperlinks` | | str | | Hyperlinks for sheet |
 
@@ -209,7 +211,7 @@ agent-xlsx sheet <file> [flags]
 
 | Flag | Alias | Type | Default | Description |
 |------|-------|------|---------|-------------|
-| `--list` | | bool | false | List all sheets |
+| `--list` | `-l` | bool | false | List all sheets |
 | `--create` | | str | | Create new sheet |
 | `--rename` | | str | | Sheet to rename (pair with --new-name) |
 | `--new-name` | | str | | New name for rename/copy |
@@ -232,6 +234,7 @@ agent-xlsx screenshot <file> [range] [flags]
 | Flag | Alias | Type | Default | Description |
 |------|-------|------|---------|-------------|
 | `--sheet` | `-s` | str | all | Sheet(s), comma-separated |
+| `--range` | `-r` | str | | Cell range (e.g. 'A1:F20') |
 | `--output` | `-o` | str | cwd | Output directory |
 | `--engine` | `-e` | str | auto | Force: excel, aspose, libreoffice |
 | `--dpi` | | int | 200 | Resolution (Aspose/LibreOffice only) |
@@ -253,9 +256,9 @@ agent-xlsx objects <file> [flags]
 | Flag | Alias | Type | Default | Description |
 |------|-------|------|---------|-------------|
 | `--sheet` | `-s` | str | all | Target sheet |
-| `--export` | | str | | Export named chart as PNG |
+| `--export` | `-e` | str | | Export named chart as PNG |
 | `--output` | `-o` | str | cwd | Output path |
-| `--engine` | `-e` | str | auto | Force: excel, aspose |
+| `--engine` | | str | auto | Force: excel, aspose |
 
 ---
 
@@ -287,8 +290,8 @@ agent-xlsx vba <file> [flags]
 
 | Flag | Alias | Type | Default | Description |
 |------|-------|------|---------|-------------|
-| `--list` | | bool | false | List modules + security summary |
-| `--read` | | str | | Read specific module code |
+| `--list` | `-l` | bool | false | List modules + security summary |
+| `--read` | `-r` | str | | Read specific module code |
 | `--read-all` | | bool | false | Read all modules (max 500 lines each) |
 | `--security` | | bool | false | Full analysis (auto_execute, suspicious keywords, IOCs, risk_level) |
 | `--run` | | str | | Execute macro (Excel required). Format: `"Module1.MacroName"` |

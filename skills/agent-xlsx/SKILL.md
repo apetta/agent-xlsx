@@ -89,6 +89,8 @@ agent-xlsx inspect <file> -s Sales                 # Everything: formulas, merge
 agent-xlsx inspect <file> -s Sales --range A1:C10  # Scoped
 agent-xlsx inspect <file> --names                  # Named ranges
 agent-xlsx inspect <file> --charts                 # Chart metadata
+agent-xlsx inspect <file> --vba                    # VBA modules
+agent-xlsx inspect <file> --format "A1" -s Sales   # Cell formatting detail
 agent-xlsx inspect <file> --comments               # Cell comments
 
 # Format — read/write cell formatting

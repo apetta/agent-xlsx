@@ -35,7 +35,7 @@ def screenshot(
     output_path: Optional[str] = typer.Option(
         None, "--output", "-o", help="Output file/directory path"
     ),
-    dpi: int = typer.Option(200, "--dpi", help="DPI for PNG rendering (LibreOffice backend only)"),
+    dpi: int = typer.Option(200, "--dpi", help="DPI for PNG rendering (Aspose/LibreOffice only)"),
     timeout: int = typer.Option(
         30, "--timeout", help="Timeout in seconds (LibreOffice backend only)"
     ),
