@@ -1,0 +1,66 @@
+export const metadata = { title: "Formats" }
+
+# Formats
+
+agent-xlsx supports five spreadsheet formats across read, write, VBA, and screenshot operations.
+
+## SUPPORTED FORMATS
+
+- **`.xlsx`** (Excel 2007+) — read, write, screenshot
+- **`.xlsm`** (Excel Macro) — read, write, VBA, screenshot
+- **`.xlsb`** (Excel Binary) — read, VBA, screenshot
+- **`.xls`** (Excel 97-2003) — read, VBA, screenshot
+- **`.ods`** (OpenDocument) — read, screenshot
+
+## FORMAT NOTES
+
+### .xlsx (Excel 2007+)
+
+The primary format. Full read and write support across all commands. This is the default output format for write operations.
+
+### .xlsm (Excel Macro-Enabled)
+
+Identical to `.xlsx` but with VBA macro support. The `vba` command can list, read, and run macros in `.xlsm` files. Write operations preserve existing macros.
+
+### .xlsb (Excel Binary)
+
+A binary format that is faster to load and smaller on disk than `.xlsx`. Read and screenshot operations work fully. VBA inspection is supported via oletools.
+
+**Write limitation:** `.xlsb` files cannot be written to. Only `.xlsx` and `.xlsm` support write operations.
+
+### .xls (Excel 97-2003)
+
+The legacy Excel format. Read and screenshot operations work fully. VBA inspection is supported via oletools.
+
+**Write limitation:** `.xls` files cannot be written to. Only `.xlsx` and `.xlsm` support write operations.
+
+### .ods (OpenDocument Spreadsheet)
+
+The open-source spreadsheet format used by LibreOffice and other applications. Read and screenshot operations work fully. VBA is not applicable to this format.
+
+**Write limitation:** `.ods` files cannot be written to. Only `.xlsx` and `.xlsm` support write operations.
+
+## WRITE SUPPORT
+
+Only `.xlsx` and `.xlsm` files support write operations. Attempting to write to `.xlsb`, `.xls`, or `.ods` files will fail — use `read` + `export` to extract data, then `write` to a new `.xlsx` file instead.
+
+## DATE HANDLING
+
+agent-xlsx includes automatic date detection. Excel stores dates as serial numbers (e.g. `45658` for 2024-12-31). The Polars adapter detects columns that contain date serial numbers and converts them to ISO 8601 strings (`YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS`) in the output.
+
+Date detection is applied automatically during `read` commands. This is always-on best-effort — columns with date serial numbers are converted; those that don't match are left as-is.
+
+## MEMORY LIMITS
+
+To prevent excessive memory usage when reading large files, agent-xlsx enforces row limits on data reads:
+
+- **Default limit:** 100 rows per read operation
+- **Maximum limit:** 10,000 rows
+
+Use the `--limit` flag to adjust within the allowed range:
+
+```bash
+agent-xlsx read data.xlsx "A1:Z10000" --limit 2000
+```
+
+When output is truncated, the JSON response includes a `"truncated": true` flag so agents know to narrow their query or paginate with `--offset`.

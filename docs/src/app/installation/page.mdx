@@ -1,0 +1,178 @@
+export const metadata = { title: "Installation" }
+
+# Installation
+
+agent-xlsx requires Python 3.10+. All data commands work with zero system dependencies. Screenshot and recalc commands need a rendering engine (Aspose or LibreOffice).
+
+## uvx (recommended)
+
+Zero install. Runs directly like `npx`:
+
+```bash
+uvx agent-xlsx probe spreadsheet.xlsx
+uvx agent-xlsx read spreadsheet.xlsx "A1:F50"
+uvx agent-xlsx search spreadsheet.xlsx "revenue" --ignore-case
+```
+
+## Global install
+
+Install once, use everywhere:
+
+```bash
+# uv (recommended)
+uv tool install agent-xlsx
+
+# pipx
+pipx install agent-xlsx
+```
+
+Then use directly:
+
+```bash
+agent-xlsx probe spreadsheet.xlsx
+```
+
+## pip
+
+Add to a project or virtual environment:
+
+```bash
+pip install agent-xlsx
+```
+
+## Agent Skill
+
+Give AI agents built-in knowledge of agent-xlsx commands and workflows:
+
+```bash
+npx skills add apetta/agent-xlsx
+```
+
+Compatible with [Claude Code](https://claude.ai/code), [Cursor](https://cursor.com), [Gemini CLI](https://geminicli.com), and [20+ other agents](https://agentskills.io).
+
+## Docker
+
+### With Aspose (lightweight, no LibreOffice)
+
+```dockerfile
+FROM python:3.12-slim
+
+# Aspose system deps for rendering on Linux
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends libgdiplus libfontconfig1 fonts-liberation && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+RUN pip install agent-xlsx aspose-cells-python
+
+# Optional: set Aspose licence
+# COPY Aspose.Cells.lic /app/
+# ENV ASPOSE_LICENSE_PATH=/app/Aspose.Cells.lic
+
+RUN agent-xlsx --help
+```
+
+### With LibreOffice (free, larger image)
+
+```dockerfile
+FROM python:3.12-slim
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends libreoffice-calc && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+RUN pip install agent-xlsx
+
+RUN agent-xlsx --help
+```
+
+## AI agent setup
+
+Add agent-xlsx to your agent's instructions so it knows when and how to use it.
+
+### Claude Code
+
+Add to your project's `CLAUDE.md`:
+
+```markdown
+## Excel files
+
+Use `agent-xlsx` CLI for all Excel file operations. Always `probe` first.
+
+- `agent-xlsx probe <file>` — profile structure (<10ms)
+- `agent-xlsx read <file> "A1:F50"` — extract data
+- `agent-xlsx search <file> "query"` — search across sheets
+- `agent-xlsx screenshot <file>` — visual capture
+- `agent-xlsx write <file> "A1" "value"` — write values
+```
+
+### Cursor
+
+Add to `.cursor/rules/agent-xlsx.mdc`:
+
+```markdown
+---
+description: Use agent-xlsx CLI for Excel file operations
+globs: ["*.xlsx", "*.xlsm", "*.xlsb", "*.xls", "*.ods"]
+---
+
+Use `agent-xlsx` CLI for all Excel file operations. Always `probe` first.
+
+- `agent-xlsx probe <file>` — profile structure (<10ms)
+- `agent-xlsx read <file> "A1:F50"` — extract data
+- `agent-xlsx search <file> "query"` — search across sheets
+- `agent-xlsx screenshot <file>` — visual capture
+```
+
+### Other agents
+
+Add to `AGENTS.md`, `codex.md`, or your agent's instruction file:
+
+```markdown
+Use `agent-xlsx` CLI for all Excel file operations.
+Always run `agent-xlsx probe <file>` first to understand the workbook structure.
+Full command reference: https://agent-xlsx.dev/commands
+```
+
+### MCP Tool Server
+
+agent-xlsx returns JSON to stdout, making it easy to wrap as an MCP tool:
+
+```python
+@server.tool()
+async def probe_workbook(file_path: str) -> str:
+    result = subprocess.run(
+        ["agent-xlsx", "probe", file_path],
+        capture_output=True, text=True
+    )
+    return result.stdout
+```
+
+## Rendering engines
+
+Aspose.Cells is included as a dependency and works out of the box for `screenshot` and `recalc` commands (in evaluation mode). For watermark-free rendering, set a licence. Alternatively, install LibreOffice as a free option.
+
+### Aspose.Cells (cross-platform, no Excel/LibreOffice needed)
+
+Aspose.Cells is bundled with agent-xlsx. Without a licence, it runs in evaluation mode (watermarks, 100-file-per-session limit).
+
+> **Note:** [Aspose.Cells for Python](https://pypi.org/project/aspose-cells-python/) is commercially licensed, not covered by this project's Apache-2.0 licence.
+
+```bash
+# Set licence
+agent-xlsx license --set /path/to/Aspose.Cells.lic
+# Or via environment variable
+export ASPOSE_LICENSE_PATH=/path/to/Aspose.Cells.lic
+```
+
+### LibreOffice (free fallback)
+
+```bash
+# macOS
+brew install --cask libreoffice
+
+# Ubuntu / Debian
+apt install libreoffice-calc
+
+# Alpine
+apk add libreoffice-calc
+```

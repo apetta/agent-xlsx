@@ -1,0 +1,45 @@
+export const metadata = { title: "Changelog" }
+
+# Changelog
+
+## V0.2.0 (FEBRUARY 2025)
+
+Non-tabular data support, multi-range reads, and compact output.
+
+- Added `--no-header` flag to `probe`, `read`, `search`, and `export` for non-tabular sheets (P&L reports, dashboards). Treats row 1 as data and uses column letters (A, B, C) as headers
+- Added `--compact/--no-compact` mode to `read` and `export` (default: on). Drops fully-null columns to reduce token waste
+- Added `--all-sheets` flag to `read` for reading the same range(s) from every sheet
+- Added multi-range read support — comma-separated ranges like `"Sheet1!A1:C10,E1:G10"`
+- Added `--range` / `-r` option flag to `screenshot` (alternative to positional RANGE arg)
+- Added `--vba` and `--format` / `-f` flags to `inspect`
+- Changed auto-detection priority — Aspose is now checked first for `screenshot` and `recalc` (was Excel first)
+- Added shell-escaped cell reference normalisation for zsh compatibility (`\!` in ranges)
+- Fixed xlwings screenshot transparency — PNGs are now opaque (flattened onto white background)
+- Enhanced LibreOffice multi-page PDF rendering and print area optimisation
+- Improved formula detection in compact mode
+- Added `aspose-cells-python` as a direct dependency
+
+## V0.1.1 (FEBRUARY 2025)
+
+CLI polish release.
+
+- Added `-h` / `--help` flag support across all commands
+- Added `--version` / `-V` flag to display the installed version
+- Removed shell completion clutter from help output
+- Fixed `-o` flag conflict on `read --offset`
+- Fixed double period in help text descriptions
+
+## V0.1.0 (FEBRUARY 2025)
+
+Initial release.
+
+- **14 commands:** `probe`, `overview`, `inspect`, `read`, `search`, `write`, `sheet`, `format`, `export`, `screenshot`, `objects`, `recalc`, `vba`, `license`
+- **5 adapters:** Polars + fastexcel for data reads, openpyxl for metadata and writes, xlwings for Excel rendering, Aspose.Cells for cross-platform rendering, LibreOffice for free rendering
+- **Polars + fastexcel** for fast data reads (7-10x faster than openpyxl)
+- **openpyxl** for metadata inspection and write operations
+- **xlwings / Aspose / LibreOffice** for screenshots, objects, and recalculation
+- **oletools** for VBA macro inspection and extraction
+- **Structured JSON output** to stdout, optimised for AI context windows
+- **Auto date detection** — converts Excel serial numbers to ISO 8601 strings
+- **5 formats** — `.xlsx`, `.xlsm`, `.xlsb`, `.xls`, `.ods`
+- **Agent Skill support** — works with Claude Code, Cursor, and other AI agents via skill files

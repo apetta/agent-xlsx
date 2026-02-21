@@ -1,0 +1,84 @@
+export const metadata = { title: "agent-xlsx" }
+
+# agent-xlsx
+
+XLSX file CLI built for AI agents. Structured JSON output optimised for context efficiency. Polars + fastexcel for speed, openpyxl for metadata, three rendering engines for screenshots.
+
+```bash
+# Run instantly (zero install)
+uvx agent-xlsx probe spreadsheet.xlsx
+
+# Or install it
+uv tool install agent-xlsx   # or: pip install agent-xlsx
+agent-xlsx probe spreadsheet.xlsx
+```
+
+## Features
+
+- **Agent-first** — Structured JSON to stdout, optimised for AI context windows
+- **Fast** — Polars + fastexcel (Rust-based), 7-10x faster than openpyxl for data reads
+- **Complete** — 14 commands for reading, writing, searching, screenshots, VBA, and more
+- **Three rendering engines** — pick one based on your environment:
+  - **xlwings** — Excel rendering (screenshot, objects, recalc, VBA execution). Requires Microsoft Excel
+  - **Aspose.Cells** — Cross-platform rendering (screenshot, objects, recalc). Headless, no Excel needed
+  - **LibreOffice** — Free rendering fallback (screenshot, recalc). Headless via soffice
+- **Non-tabular support** — `--no-header` mode for P&L reports, dashboards, and sheets where row 1 isn't a header
+- **Compact output** — Automatically drops null columns to minimise token waste
+- **Cross-platform** — macOS, Linux, Windows
+- **5 formats** — .xlsx, .xlsm, .xlsb, .xls, .ods
+
+## Works with
+
+Claude Code, Cursor, GitHub Copilot, OpenAI Codex, Google Gemini, opencode, and any agent that can run shell commands.
+
+## Example
+
+```bash
+# Profile a spreadsheet (instant, <10ms)
+agent-xlsx probe data.xlsx --full
+
+# Output includes column_map for building ranges:
+# {"column_map": {"user_id": "A", "amount": "E"}, "last_col": "W"}
+
+# Read specific data
+agent-xlsx read data.xlsx "A1:F50" --sort amount --descending
+
+# Search across all sheets
+agent-xlsx search data.xlsx "overdue" --ignore-case
+
+# Take HD screenshots
+agent-xlsx screenshot data.xlsx --sheet Sales
+```
+
+## Why structured JSON?
+
+Commands return structured JSON to stdout by default. This provides:
+
+- **Token-efficient** — Compact output uses fewer tokens than raw cell dumps or verbose formats
+- **Predictable** — Consistent schema across all commands, easy to parse programmatically
+- **Truncation-safe** — Results are capped with `truncated` flags so agents know when to narrow queries
+- **Error-aware** — Errors return structured codes (`SHEET_NOT_FOUND`, `INVALID_RANGE`) with suggestions
+
+## Architecture
+
+Five specialised adapters, each chosen for what it does best:
+
+1. **Polars + fastexcel** — Data reads (probe, read, search, export). Rust-based, 7-10x faster than openpyxl
+2. **openpyxl** — Metadata and writes (overview, inspect, format, write, sheet). Full Excel format access
+3. **xlwings** — Excel rendering (screenshot, objects, recalc, VBA execution). Requires Microsoft Excel
+4. **Aspose.Cells** — Cross-platform rendering (screenshot, objects, recalc). Headless, no Excel needed
+5. **LibreOffice** — Free rendering fallback (screenshot, recalc). Headless via soffice
+
+## Performance
+
+- **Data commands** (`probe`, `read`, `search`, `export`) — instant. Polars + fastexcel (Rust) with zero-copy Arrow transfer. Scales to 100K+ rows without breaking a sweat.
+- **Metadata commands** (`overview`, `inspect`) — fast. openpyxl parses only what's needed.
+- **Rendering commands** (`screenshot`, `recalc`) — a few seconds per sheet. Three engines to choose from: Excel (highest fidelity), Aspose (cross-platform), LibreOffice (free).
+
+## Supported formats
+
+- **`.xlsx`** (Excel 2007+) — read, write, screenshot
+- **`.xlsm`** (Excel Macro) — read, write, VBA, screenshot
+- **`.xlsb`** (Excel Binary) — read, VBA, screenshot
+- **`.xls`** (Excel 97-2003) — read, VBA, screenshot
+- **`.ods`** (OpenDocument) — read, screenshot

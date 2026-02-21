@@ -1,0 +1,211 @@
+export const metadata = { title: "Quick Start" }
+
+# Quick Start
+
+agent-xlsx follows a **progressive disclosure** workflow. Start with the cheapest call, then opt into detail as needed:
+
+```
+probe (<10ms)  →  screenshot (~3s)  →  read (data)  →  inspect (metadata)
+```
+
+## Probe first
+
+`probe` is instant and returns sheet names, dimensions, headers, and a `column_map` that maps header names to column letters. Always run it first.
+
+```bash
+# Basic profile — sheet names, headers, column_map
+agent-xlsx probe file.xlsx
+
+# Add column types and null counts
+agent-xlsx probe file.xlsx --types
+
+# Full profile — types, sample rows, stats, date summary
+agent-xlsx probe file.xlsx --full
+
+# Single-sheet deep dive
+agent-xlsx probe file.xlsx -s "Sales" --full
+```
+
+The `column_map` is the key output — it tells you which column letter each header lives in:
+
+```json
+{"column_map": {"user_id": "A", "amount": "E"}, "last_col": "W"}
+```
+
+Use this to build ranges for subsequent commands.
+
+## Screenshot for visual context
+
+Take HD PNG screenshots to understand layout, formatting, and charts at a glance.
+
+```bash
+# All sheets
+agent-xlsx screenshot file.xlsx
+
+# Specific sheet
+agent-xlsx screenshot file.xlsx -s Sales
+
+# Range capture
+agent-xlsx screenshot file.xlsx "Sales!A1:F20"
+
+# Save to directory
+agent-xlsx screenshot file.xlsx -o ./shots/
+```
+
+Requires a rendering engine (Excel, Aspose, or LibreOffice). See the [Backends](/backends) page for setup.
+
+## Read data
+
+`read` uses Polars + fastexcel under the hood — 7-10x faster than openpyxl.
+
+```bash
+# Read a range (range is a positional argument)
+agent-xlsx read file.xlsx "A1:F50"
+
+# Sheet + range
+agent-xlsx read file.xlsx -s Sales "B2:G100"
+
+# Paginate large datasets
+agent-xlsx read file.xlsx --limit 500 --offset 100
+
+# Sort by column
+agent-xlsx read file.xlsx --sort amount --descending
+
+# Get formula strings instead of computed values (slower, uses openpyxl)
+agent-xlsx read file.xlsx --formulas
+```
+
+## Inspect metadata
+
+`inspect` returns everything about a sheet in one pass — formulas, merges, tables, charts, comments, conditional formatting, validation, hyperlinks, and freeze panes.
+
+```bash
+# Full sheet inspection
+agent-xlsx inspect file.xlsx -s Sales
+
+# Scope to a range
+agent-xlsx inspect file.xlsx -s Sales --range A1:C10
+
+# Targeted queries
+agent-xlsx inspect file.xlsx --names       # Named ranges
+agent-xlsx inspect file.xlsx --charts      # Chart metadata
+agent-xlsx inspect file.xlsx --comments    # Cell comments
+```
+
+## Common patterns
+
+### Profile a new spreadsheet
+
+```bash
+agent-xlsx probe file.xlsx --full       # Structure + types + samples + stats
+agent-xlsx screenshot file.xlsx         # Visual understanding
+```
+
+### Find and extract specific data
+
+```bash
+agent-xlsx probe file.xlsx              # Get column_map
+agent-xlsx search file.xlsx "overdue" -i   # Find matching cells
+agent-xlsx read file.xlsx "A1:G50" -s Invoices  # Extract the range
+```
+
+Search returns cell references (`sheet`, `cell`, `column`, `row`, `value`) that you can feed directly into `read` ranges.
+
+### Audit formulas
+
+```bash
+# Scan for errors — #REF!, #DIV/0!, #NAME?, etc. (no engine needed)
+agent-xlsx recalc file.xlsx --check-only
+
+# Read formula strings
+agent-xlsx read file.xlsx --formulas
+
+# Find specific formulas
+agent-xlsx search file.xlsx "VLOOKUP" --in-formulas
+```
+
+### Write results back
+
+```bash
+# Write a header
+agent-xlsx write file.xlsx "H1" "Status" -o updated.xlsx
+
+# Write a column of values
+agent-xlsx write updated.xlsx "H2" --json '["Done","Pending","Done"]'
+
+# Write a formula
+agent-xlsx write file.xlsx "B10" "=SUM(B1:B9)" --formula
+
+# Write a 2D array
+agent-xlsx write file.xlsx "A1:C3" --json '[[1,2,3],[4,5,6],[7,8,9]]'
+```
+
+Only `.xlsx` and `.xlsm` files are writable. Use `-o` to save to a new file and preserve the original.
+
+### Export for downstream use
+
+```bash
+# CSV to file
+agent-xlsx export file.xlsx --format csv -s Sales -o sales.csv
+
+# Markdown table to stdout
+agent-xlsx export file.xlsx --format markdown
+
+# JSON (default)
+agent-xlsx export file.xlsx
+```
+
+### Read non-tabular data
+
+For P&L reports, dashboards, and other sheets where row 1 isn't a header:
+
+```bash
+agent-xlsx probe file.xlsx --no-header            # See structure with column letters
+agent-xlsx read file.xlsx "A1:G50" --no-header     # Read with column letters as headers
+agent-xlsx export file.xlsx --no-header --format csv  # Export non-tabular data
+```
+
+### Read multiple ranges or all sheets
+
+```bash
+# Read two ranges from the same sheet
+agent-xlsx read file.xlsx "2022!H54:AT54,H149:AT149"
+
+# Read the same range from every sheet
+agent-xlsx read file.xlsx "A1:F50" --all-sheets
+```
+
+### Analyse VBA for security
+
+```bash
+# Security analysis — risk level, auto-execute triggers, IOCs
+agent-xlsx vba suspect.xlsm --security
+
+# Read all module code
+agent-xlsx vba suspect.xlsm --read-all
+
+# List modules with summary
+agent-xlsx vba suspect.xlsm --list
+```
+
+## Key behaviours
+
+**Dates auto-convert** — Excel serial numbers (e.g. `44927`) are automatically converted to ISO strings (`"2023-01-15"`). No manual conversion needed.
+
+**column_map from probe** — Maps header names to column letters. Use this to build ranges without counting columns manually.
+
+**--formulas switches engine** — Default reads use Polars (fast, computed values only). Adding `--formulas` falls back to openpyxl (slower, but returns the actual formula strings).
+
+**--in-formulas for formula search** — Default search checks cell values. Add `--in-formulas` to search inside formula strings instead.
+
+**Search returns cell refs** — Each search result includes `sheet`, `cell`, `column`, `row`, and `value` fields that you can use directly in `read` or `inspect` ranges.
+
+**Results are capped** — Search returns max 25 results, formulas max 50, comments max 20. Always check the `truncated` field in the response and narrow your query if it is `true`.
+
+**Range is positional** — Pass ranges like `"A1:F50"` or `"Sheet1!A1:F50"` as positional arguments, not flags.
+
+**-o preserves the original** — When you specify `--output`, write and format commands save to a new file instead of modifying in-place.
+
+**Compact mode drops null columns** — By default, `read` and `export` drop columns that are entirely null, reducing token waste. Use `--no-compact` to keep all columns.
+
+**--no-header for non-tabular sheets** — When row 1 isn't a header (P&L reports, dashboards), use `--no-header` to treat it as data. Column letters (A, B, C) are used as headers instead. Works with `probe`, `read`, `search`, and `export`.

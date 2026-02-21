@@ -1,0 +1,106 @@
+export const metadata = { title: "Backends" }
+
+# Backends
+
+agent-xlsx uses three rendering engines for the `screenshot`, `objects`, and `recalc` commands. The engine is auto-detected at runtime, but you can force a specific one with the `--engine` flag. The priority order varies by command.
+
+## AUTO-DETECTION PRIORITY
+
+### screenshot, recalc
+
+```
+1. Aspose.Cells      — aspose-cells-python installed
+   ↓ not found
+2. Excel (xlwings)   — Microsoft Excel installed
+   ↓ not found
+3. LibreOffice       — soffice on PATH or standard locations
+   ↓ not found
+4. NoRenderingBackendError
+```
+
+### objects
+
+```
+1. Excel (xlwings)   — Microsoft Excel installed
+   ↓ not found
+2. Aspose.Cells      — aspose-cells-python installed
+   ↓ not found
+3. ExcelRequiredError (no LibreOffice support)
+```
+
+Force a specific engine:
+
+```bash
+agent-xlsx screenshot data.xlsx --engine excel
+agent-xlsx screenshot data.xlsx --engine aspose
+agent-xlsx screenshot data.xlsx --engine libreoffice
+```
+
+## EXCEL (XLWINGS)
+
+- **Platforms:** macOS, Windows (requires Microsoft Excel)
+- **Fidelity:** Perfect — native Excel rendering
+- **Speed:** Fast
+- **Commands:** `screenshot`, `objects`, `recalc`, `vba --run`
+
+Excel via xlwings provides the highest fidelity output since it uses Microsoft Excel's own rendering engine. It is the only backend that supports `vba --run` for macro execution.
+
+**macOS quirk:** Requires `visible=True` with a 0.5-second delay for the CopyPicture API. Windows runs headless.
+
+Auto-fits columns before capture (`sheet.autofit('c')`) to prevent `####` display in narrow columns.
+
+## ASPOSE.CELLS
+
+- **Platforms:** All (cross-platform, headless)
+- **Fidelity:** Near-perfect
+- **Speed:** Fast
+- **Commands:** `screenshot`, `objects`, `recalc`
+
+Aspose.Cells is a cross-platform, headless rendering engine that does not require Microsoft Excel. Install it with:
+
+```bash
+uv pip install aspose-cells-python
+```
+
+### Licensing
+
+Aspose.Cells is a **proprietary, commercially licensed** library — it is not covered by agent-xlsx's Apache-2.0 licence. Evaluation mode works but adds watermarks and has a 100-file-per-session limit.
+
+Evaluation mode output includes `"evaluation_mode": true` and `"evaluation_notice"` in the JSON response.
+
+### Setting a licence
+
+- **CLI** — `agent-xlsx license --set /path/to/Aspose.Cells.lic`
+- **Env var (file)** — `ASPOSE_LICENSE_PATH=/path/to/Aspose.Cells.lic`
+- **Env var (base64)** — `ASPOSE_LICENSE_DATA=<base64 .lic content>`
+- **Config file** — Stored in `~/.agent-xlsx/config.json`
+
+Priority order: environment variable → config file. The licence is applied once per process and cached.
+
+## LIBREOFFICE
+
+- **Platforms:** All (free, open-source)
+- **Fidelity:** Good
+- **Speed:** Slower (multi-step pipeline)
+- **Commands:** `screenshot`, `recalc`
+
+LibreOffice is a free, open-source fallback that works on all platforms without any commercial licence.
+
+**Screenshot pipeline:** `.xlsx → LibreOffice PDF export → PyMuPDF PNG render`
+
+Each invocation uses a unique temporary user profile to avoid lock conflicts.
+
+### Standard install locations checked
+
+- **macOS:** `/Applications/LibreOffice.app/Contents/MacOS/soffice`
+- **Linux:** `/usr/bin/libreoffice`, `/usr/bin/soffice`, `/snap/bin/libreoffice`
+
+The `--timeout` flag is LibreOffice-specific (default: 30 seconds for screenshot, 60 seconds for recalc).
+
+## COMMAND × ENGINE MATRIX
+
+- `screenshot` — Excel, Aspose, LibreOffice
+- `objects` (list) — Excel, Aspose
+- `objects` (export) — Excel, Aspose
+- `recalc` — Excel, Aspose, LibreOffice
+- `vba --run` — Excel only
