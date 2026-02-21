@@ -557,24 +557,6 @@ RUN apt-get update && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 ```
 
-### MCP Tool Server
-
-agent-xlsx's JSON output is designed for direct consumption by LLM agents. Each command returns structured JSON to stdout, making it trivial to wrap as an MCP tool:
-
-```python
-@server.tool()
-async def probe_workbook(file_path: str) -> str:
-    result = subprocess.run(
-        ["agent-xlsx", "probe", file_path],
-        capture_output=True, text=True
-    )
-    return result.stdout
-```
-
-### Claude Code Integration
-
-Add agent-xlsx commands as custom slash commands or MCP tools for Claude Code to use when working with Excel files in your projects.
-
 ---
 
 ## Error Handling

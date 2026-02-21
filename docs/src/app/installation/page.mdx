@@ -133,20 +133,6 @@ Always run `agent-xlsx probe <file>` first to understand the workbook structure.
 Full command reference: https://agent-xlsx.dev/commands
 ```
 
-### MCP Tool Server
-
-agent-xlsx returns JSON to stdout, making it easy to wrap as an MCP tool:
-
-```python
-@server.tool()
-async def probe_workbook(file_path: str) -> str:
-    result = subprocess.run(
-        ["agent-xlsx", "probe", file_path],
-        capture_output=True, text=True
-    )
-    return result.stdout
-```
-
 ## Rendering engines
 
 Aspose.Cells is included as a dependency and works out of the box for `screenshot` and `recalc` commands (in evaluation mode). For watermark-free rendering, set a licence. Alternatively, install LibreOffice as a free option.
