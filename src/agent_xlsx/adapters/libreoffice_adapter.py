@@ -95,7 +95,7 @@ def _prepare_sheet_for_export(
     """Prepare an xlsx with only the target sheet, optimised for PDF export.
 
     Uses openpyxl to set print area, zero margins, landscape orientation,
-    fitToWidth=1, fitToHeight=0, and removes all other sheets.
+    fitToWidth=1, fitToHeight=1, and removes all other sheets.
 
     Returns the resolved print-area range string (e.g. ``"A1:AT156"``).
     """
@@ -111,7 +111,9 @@ def _prepare_sheet_for_export(
 
     ws = wb[sheet_name]
 
-    # Set print area — compute data extent when no explicit range given
+    # Set print area to the exact data range so LO doesn't render
+    # formatted-but-empty cells beyond it.  Safe with fitToHeight=1
+    # (everything fits on one page regardless).
     if range_str:
         ws.print_area = range_str
         resolved = range_str
@@ -136,9 +138,18 @@ def _prepare_sheet_for_export(
     ws.page_setup = PrintPageSetup(
         orientation="landscape",
         fitToWidth=1,
-        fitToHeight=0,
+        fitToHeight=1,
     )
     ws.sheet_properties.pageSetUpPr.fitToPage = True
+
+    # Suppress headers/footers (page numbers prevent autocrop from trimming whitespace)
+    for attr in ("oddHeader", "evenHeader", "firstHeader",
+                 "oddFooter", "evenFooter", "firstFooter"):
+        hf = getattr(ws, attr, None)
+        if hf:
+            hf.left.text = ""
+            hf.center.text = ""
+            hf.right.text = ""
 
     wb.save(str(dest_path))
     wb.close()
