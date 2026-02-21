@@ -97,7 +97,7 @@ agent-xlsx search <file> <query> [flags]
 | `--in-formulas` | | bool | false | Search formula strings (openpyxl fallback) |
 | `--no-header` | | bool | false | Treat row 1 as data, columns as Excel letters |
 
-**Output:** `results[].{sheet, column, cell, value, row}` — `column` is always an Excel letter (A, B, H, etc.). Max 25 results. Check `truncated` field.
+**Output:** `matches[].{sheet, column, cell, value, row}` — `column` is always an Excel letter (A, B, H, etc.). Max 25 results. Check `truncated` field.
 
 ---
 
@@ -132,7 +132,7 @@ agent-xlsx overview <file> [flags]
 | `--include-formulas` | | bool | false | Add deduplicated formula patterns per sheet (up to 10 unique patterns with counts) |
 | `--include-formatting` | | bool | false | Add formatting summary |
 
-**Output:** `sheets[].{name, row_count, col_count, data_rows, data_cols}`, `named_ranges`, `tables`, `defined_names`
+**Output:** `sheets[].{name, row_count, col_count, data_rows, data_cols}`, `named_ranges`, `named_range_count`, `has_vba`, `vba_module_count`, `total_formula_count`, `total_chart_count`
 
 ---
 
@@ -147,7 +147,7 @@ agent-xlsx inspect <file> [flags]
 | Flag | Alias | Type | Default | Description |
 |------|-------|------|---------|-------------|
 | `--sheet` | `-s` | str | | Full sheet inspection (formulas, merges, tables, charts, comments, conditional formatting, validation, hyperlinks, freeze panes) |
-| `--range` | | str | | Scope to range (requires --sheet) |
+| `--range` | | str | | Scope to range (defaults to first sheet if --sheet not given) |
 | `--names` | | bool | false | Named ranges only |
 | `--charts` | | bool | false | Chart metadata only |
 | `--vba` | | bool | false | Inspect VBA modules |
@@ -235,7 +235,7 @@ agent-xlsx screenshot <file> [range] [flags]
 |------|-------|------|---------|-------------|
 | `--sheet` | `-s` | str | all | Sheet(s), comma-separated |
 | `--range` | `-r` | str | | Cell range (e.g. 'A1:F20') |
-| `--output` | `-o` | str | cwd | Output directory |
+| `--output` | `-o` | str | /tmp/agent-xlsx | Output directory |
 | `--engine` | `-e` | str | auto | Force: excel, aspose, libreoffice |
 | `--dpi` | | int | 200 | Resolution (Aspose/LibreOffice only) |
 | `--timeout` | | int | 30 | Seconds (LibreOffice only) |
@@ -257,7 +257,7 @@ agent-xlsx objects <file> [flags]
 |------|-------|------|---------|-------------|
 | `--sheet` | `-s` | str | all | Target sheet |
 | `--export` | `-e` | str | | Export named chart as PNG |
-| `--output` | `-o` | str | cwd | Output path |
+| `--output` | `-o` | str | /tmp/agent-xlsx | Output path |
 | `--engine` | | str | auto | Force: excel, aspose |
 
 ---

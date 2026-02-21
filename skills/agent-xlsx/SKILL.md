@@ -65,7 +65,7 @@ agent-xlsx read <file> "H54:AT54" --all-sheets                    # Same range, 
 agent-xlsx read <file> "H54:AT54,H149:AT149" --all-sheets         # Multi-range × all sheets
 
 # Search
-agent-xlsx search <file> "revenue"                 # Exact match, all sheets
+agent-xlsx search <file> "revenue"                 # Substring match, all sheets
 agent-xlsx search <file> "rev.*" --regex           # Regex
 agent-xlsx search <file> "stripe" --ignore-case    # Case-insensitive
 agent-xlsx search <file> "SUM(" --in-formulas      # Inside formula strings
@@ -239,7 +239,7 @@ JSON to stdout. Errors:
 {"error": true, "code": "SHEET_NOT_FOUND", "message": "...", "suggestions": ["..."]}
 ```
 
-Codes: `FILE_NOT_FOUND`, `INVALID_FORMAT`, `SHEET_NOT_FOUND`, `INVALID_RANGE`, `EXCEL_REQUIRED`, `LIBREOFFICE_REQUIRED`, `ASPOSE_NOT_INSTALLED`, `NO_RENDERING_BACKEND`, `MEMORY_EXCEEDED`, `VBA_NOT_FOUND`, `CHART_NOT_FOUND`.
+Codes: `FILE_NOT_FOUND`, `INVALID_FORMAT`, `SHEET_NOT_FOUND`, `RANGE_INVALID`, `INVALID_REGEX`, `EXCEL_REQUIRED`, `LIBREOFFICE_REQUIRED`, `ASPOSE_NOT_INSTALLED`, `NO_RENDERING_BACKEND`, `MEMORY_EXCEEDED`, `VBA_NOT_FOUND`, `CHART_NOT_FOUND`.
 
 ## Deep-Dive Reference
 

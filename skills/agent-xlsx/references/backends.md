@@ -4,14 +4,16 @@ agent-xlsx uses three rendering engines for `screenshot`, `objects`, and `recalc
 
 ## Auto-Detection Priority
 
+Priority differs by command:
+
+**screenshot / recalc:**
 ```
-1. Aspose.Cells      — included as a core dependency (always available)
-   ↓ not installed / unavailable
-2. Excel (xlwings)   — Microsoft Excel installed
-   ↓ not found
-3. LibreOffice       — soffice on PATH or standard locations
-   ↓ not found
-4. NoRenderingBackendError
+1. Aspose.Cells → 2. Excel (xlwings) → 3. LibreOffice → NoRenderingBackendError
+```
+
+**objects:**
+```
+1. Excel (xlwings) → 2. Aspose.Cells → ExcelRequiredError (no LibreOffice support)
 ```
 
 Force a specific engine with `--engine excel|aspose|libreoffice`.
@@ -49,7 +51,7 @@ Aspose.Cells is included as a core dependency of agent-xlsx — no separate inst
 
 Priority: env var → config file. Licence applied once per process (cached).
 
-Evaluation mode output includes `"evaluation_mode": true` and `"watermark_notice"` in JSON.
+Evaluation mode output includes `"evaluation_mode": true` and `"evaluation_notice"` in JSON.
 
 ## LibreOffice
 
@@ -78,7 +80,7 @@ Each invocation uses a unique temp user profile to avoid lock conflicts.
 | Excel 97-2003 | `.xls` | yes | — | yes | yes |
 | OpenDocument | `.ods` | yes | — | — | yes |
 
-Write to .xlsb/.xls/.ods auto-converts output to .xlsx.
+Only `.xlsx` and `.xlsm` support in-place writes. Using `-o` with a non-writable extension (e.g. `-o out.xls`) auto-converts the output to `.xlsx`.
 
 ## Command × Engine Matrix
 
