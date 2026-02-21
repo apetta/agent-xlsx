@@ -46,9 +46,9 @@ Only `.xlsx` and `.xlsm` files support write operations. Attempting to write to 
 
 ## DATE HANDLING
 
-agent-xlsx includes automatic date detection. Excel stores dates as serial numbers (e.g. `45658` for 2024-12-31). The Polars adapter detects columns that contain date serial numbers and converts them to ISO 8601 strings (`YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS`) in the output.
+agent-xlsx includes automatic date handling. Excel stores dates as serial numbers (e.g. `45658` for 2024-12-31) with a date number format. The Polars adapter (via fastexcel/calamine) detects these formats and parses date columns as ISO 8601 strings (`YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS`) in the output.
 
-Date detection is applied automatically during `read` commands. This is always-on best-effort — columns with date serial numbers are converted; those that don't match are left as-is.
+Date handling is applied automatically across `read`, `search`, `export`, and `probe` commands. This is always-on best-effort — columns with date number formats are converted; those without (e.g. General format) are left as-is.
 
 ## MEMORY LIMITS
 

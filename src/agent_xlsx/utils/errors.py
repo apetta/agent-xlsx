@@ -118,6 +118,15 @@ class AsposeNotInstalledError(AgentExcelError):
         )
 
 
+class InvalidRegexError(AgentExcelError):
+    def __init__(self, pattern: str, reason: str):
+        super().__init__(
+            "INVALID_REGEX",
+            f"Invalid regex pattern: {reason}",
+            [f"Pattern: {pattern}", "Check regex syntax and try again"],
+        )
+
+
 class MemoryExceededError(AgentExcelError):
     def __init__(self, used_mb: float, limit_mb: float):
         super().__init__(

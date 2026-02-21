@@ -10,7 +10,7 @@ from agent_xlsx.adapters.polars_adapter import search_values
 from agent_xlsx.cli import app
 from agent_xlsx.formatters.json_formatter import output
 from agent_xlsx.utils.constants import MAX_SEARCH_RESULTS
-from agent_xlsx.utils.errors import SheetNotFoundError, handle_error
+from agent_xlsx.utils.errors import InvalidRegexError, SheetNotFoundError, handle_error
 from agent_xlsx.utils.validation import validate_file
 
 
@@ -38,19 +38,37 @@ def search(
     Use --in-formulas to search formula strings via openpyxl.
     """
     path = validate_file(file)
+
+    if regex:
+        import re
+
+        try:
+            re.compile(query)
+        except re.error as e:
+            raise InvalidRegexError(query, str(e))
+
     start = time.perf_counter()
 
     if in_formulas:
         matches = _search_formulas(path, query, sheet, regex, ignore_case)
     else:
-        matches = search_values(
-            filepath=path,
-            query=query,
-            sheet_name=sheet,
-            regex=regex,
-            ignore_case=ignore_case,
-            no_header=no_header,
-        )
+        try:
+            matches = search_values(
+                filepath=path,
+                query=query,
+                sheet_name=sheet,
+                regex=regex,
+                ignore_case=ignore_case,
+                no_header=no_header,
+            )
+        except Exception as e:
+            # Polars uses a Rust regex engine that rejects some Python-valid
+            # patterns (e.g. backreferences, lookaheads). Surface these as
+            # structured errors rather than raw tracebacks.
+            if regex and "regex" in str(e).lower():
+                reason = str(e).strip().rsplit("\n", 1)[-1].strip()
+                raise InvalidRegexError(query, reason) from None
+            raise
 
     elapsed_ms = round((time.perf_counter() - start) * 1000, 1)
 

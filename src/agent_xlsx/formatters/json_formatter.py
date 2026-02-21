@@ -17,7 +17,12 @@ def _serialise(obj: Any) -> Any:
     """Handle non-standard types during JSON serialisation."""
     import datetime
 
-    if isinstance(obj, (datetime.date, datetime.datetime)):
+    if isinstance(obj, datetime.datetime):
+        # Normalise: midnight datetimes → date-only string for consistency
+        if obj.hour == 0 and obj.minute == 0 and obj.second == 0 and obj.microsecond == 0:
+            return obj.strftime("%Y-%m-%d")
+        return obj.isoformat()
+    if isinstance(obj, datetime.date):
         return obj.isoformat()
     if isinstance(obj, datetime.timedelta):
         return str(obj)

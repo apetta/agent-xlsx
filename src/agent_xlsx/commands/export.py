@@ -15,6 +15,7 @@ from agent_xlsx.adapters.polars_adapter import (
 from agent_xlsx.cli import app
 from agent_xlsx.formatters.json_formatter import output
 from agent_xlsx.utils.dataframe import apply_compact
+from agent_xlsx.utils.dates import detect_date_column_indices, excel_serial_to_isodate
 from agent_xlsx.utils.errors import SheetNotFoundError, handle_error
 from agent_xlsx.utils.validation import validate_file
 
@@ -61,6 +62,7 @@ def export(
         df = read_sheet_data(filepath=path, sheet_name=target_sheet, no_header=no_header)
 
     df = apply_compact(df, compact)
+    df = _apply_df_date_conversion(df, path, target_sheet)
 
     elapsed_ms = round((time.perf_counter() - start) * 1000, 1)
 
@@ -161,6 +163,43 @@ def _export_markdown(df: Any, output_path: Optional[str]) -> None:
         )
     else:
         sys.stdout.write(md_str)
+
+
+def _is_numeric(s: str) -> bool:
+    """Check if a string looks like a positive number (for date serial coercion)."""
+    try:
+        return float(s) > 0
+    except (ValueError, TypeError):
+        return False
+
+
+def _apply_df_date_conversion(df: Any, filepath: Path, sheet_name: Any) -> Any:
+    """Best-effort conversion of date serial numbers in a DataFrame."""
+    try:
+        import polars as pl
+
+        sheet_arg = sheet_name if isinstance(sheet_name, str) else None
+        indices = detect_date_column_indices(str(filepath), sheet_arg)
+        if not indices:
+            return df
+        for idx in indices:
+            if idx >= len(df.columns):
+                continue
+            col_name = df.columns[idx]
+            converted = [
+                excel_serial_to_isodate(float(v))
+                if isinstance(v, (int, float)) and v == v and v > 0
+                else (
+                    excel_serial_to_isodate(float(v))
+                    if isinstance(v, str) and _is_numeric(v)
+                    else v
+                )
+                for v in df[col_name].to_list()
+            ]
+            df = df.with_columns(pl.Series(col_name, converted))
+        return df
+    except Exception:
+        return df
 
 
 def _df_to_markdown(df) -> list[str]:

@@ -200,7 +200,7 @@ agent-xlsx vba suspect.xlsm --list
 
 **Search returns cell refs** — Each search result includes `sheet`, `cell`, `column`, `row`, and `value` fields that you can use directly in `read` or `inspect` ranges.
 
-**Results are capped** — Search returns max 25 results, formulas max 50, comments max 20. Always check the `truncated` field in the response and narrow your query if it is `true`.
+**Results are capped** — Search returns max 25 results (including `--in-formulas`). Inspect caps: formulas 50, comments 20. Always check the `truncated` field in the response and narrow your query if it is `true`.
 
 **Range is positional** — Pass ranges like `"A1:F50"` or `"Sheet1!A1:F50"` as positional arguments, not flags.
 

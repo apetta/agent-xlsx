@@ -18,6 +18,7 @@ from agent_xlsx.utils.constants import (
     MAX_SEARCH_RESULTS,
 )
 from agent_xlsx.utils.dates import (
+    detect_date_column_indices_batch,
     detect_date_columns,
     excel_serial_to_isodate,
 )
@@ -276,6 +277,17 @@ def probe_workbook(
                     if col in date_col_names:
                         sheet_info["column_types"][col] = "date"
 
+            # --no-header: all columns are String, so detect dates by index
+            if no_header:
+                try:
+                    date_idx_map = detect_date_column_indices_batch(fpath, [name])
+                    for idx in date_idx_map.get(name, set()):
+                        col_letter = index_to_col_letter(idx)
+                        if col_letter in sheet_info["column_types"]:
+                            sheet_info["column_types"][col_letter] = "date"
+                except Exception:
+                    pass
+
             # Potential header detection for non-tabular sheets
             if no_header:
                 potential = _detect_potential_headers(df)
@@ -295,6 +307,12 @@ def probe_workbook(
                 for row in head_rows + tail_rows:
                     for col in date_col_set:
                         val = row.get(col)
+                        # --no-header yields string values; coerce numeric strings
+                        if isinstance(val, str):
+                            try:
+                                val = float(val)
+                            except (ValueError, TypeError):
+                                continue
                         if isinstance(val, (int, float)):
                             row[col] = excel_serial_to_isodate(float(val))
             sheet_info["sample"] = {
@@ -414,6 +432,12 @@ def search_values(
 
     matches: list[dict[str, Any]] = []
 
+    # Best-effort date column detection — single workbook open for all sheets
+    try:
+        all_date_cols = detect_date_column_indices_batch(fpath, target_sheets)
+    except Exception:
+        all_date_cols = {}
+
     for name in target_sheets:
         with _suppress_stderr():
             if no_header:
@@ -427,6 +451,8 @@ def search_values(
 
         if len(df) == 0:
             continue
+
+        date_col_indices = all_date_cols.get(name, set())
 
         for col in df.columns:
             # Cast column to string for searching
@@ -453,6 +479,23 @@ def search_values(
 
                 col_idx = df.columns.index(col)
                 col_letter = index_to_col_letter(col_idx)
+
+                # Convert date serial numbers to ISO strings
+                # --no-header makes all columns String; coerce numeric strings
+                if col_idx in date_col_indices and isinstance(cell_value, str):
+                    try:
+                        cell_value = float(cell_value)
+                    except (ValueError, TypeError):
+                        pass
+                if (
+                    col_idx in date_col_indices
+                    and isinstance(cell_value, (int, float))
+                    and cell_value == cell_value  # not NaN
+                    and cell_value > 0
+                ):
+                    converted = excel_serial_to_isodate(float(cell_value))
+                    if converted is not None:
+                        cell_value = converted
                 # no_header: row 1 is data, so Excel row = row_idx + 1
                 # with header: row 1 consumed as header, so Excel row = row_idx + 2
                 excel_row = row_idx + 1 if no_header else row_idx + 2

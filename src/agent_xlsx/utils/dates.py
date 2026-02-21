@@ -87,6 +87,87 @@ def excel_serial_to_isodate(serial: float) -> str | None:
     return dt.strftime("%Y-%m-%d")
 
 
+def detect_date_column_indices(
+    filepath: str | Path, sheet_name: str | None = None
+) -> set[int]:
+    """Detect columns with date number formats. Returns 0-based column indices.
+
+    Unlike :func:`detect_date_columns` which returns header names, this
+    returns indices — making it safe for ``--no-header`` mode where
+    DataFrame columns are letters (A, B, C) rather than header values.
+    """
+    import openpyxl
+
+    wb = openpyxl.load_workbook(str(filepath), read_only=True)
+    try:
+        if sheet_name is not None:
+            if sheet_name not in wb.sheetnames:
+                return set()
+            ws = wb[sheet_name]
+        else:
+            ws = wb.active
+            if ws is None:
+                return set()
+
+        rows_iter = ws.iter_rows(min_row=1, max_row=2)
+        try:
+            next(rows_iter)  # row 1 (header or first data row)
+        except StopIteration:
+            return set()
+        try:
+            data_row = next(rows_iter)  # row 2 — carries number formats
+        except StopIteration:
+            return set()
+
+        return {
+            i
+            for i, cell in enumerate(data_row)
+            if _DATE_FORMAT_RE.search(cell.number_format or "General")
+        }
+    finally:
+        wb.close()
+
+
+def detect_date_column_indices_batch(
+    filepath: str | Path, sheet_names: list[str]
+) -> dict[str, set[int]]:
+    """Detect date column indices for multiple sheets in a single workbook open.
+
+    Returns ``{sheet_name: set[int]}`` mapping each sheet to its 0-based
+    date column indices.  More efficient than calling
+    :func:`detect_date_column_indices` per sheet.
+    """
+    import openpyxl
+
+    result: dict[str, set[int]] = {}
+    wb = openpyxl.load_workbook(str(filepath), read_only=True)
+    try:
+        for name in sheet_names:
+            if name not in wb.sheetnames:
+                result[name] = set()
+                continue
+            ws = wb[name]
+            rows_iter = ws.iter_rows(min_row=1, max_row=2)
+            try:
+                next(rows_iter)  # row 1
+            except StopIteration:
+                result[name] = set()
+                continue
+            try:
+                data_row = next(rows_iter)  # row 2
+            except StopIteration:
+                result[name] = set()
+                continue
+            result[name] = {
+                i
+                for i, cell in enumerate(data_row)
+                if _DATE_FORMAT_RE.search(cell.number_format or "General")
+            }
+        return result
+    finally:
+        wb.close()
+
+
 def convert_date_values(
     rows: list[list[Any]],
     headers: list[str],

@@ -12,7 +12,7 @@ from agent_xlsx.cli import app
 from agent_xlsx.formatters.json_formatter import output
 from agent_xlsx.utils.constants import DEFAULT_LIMIT, DEFAULT_OFFSET, MAX_READ_ROWS
 from agent_xlsx.utils.dataframe import apply_compact
-from agent_xlsx.utils.dates import convert_date_values, detect_date_columns
+from agent_xlsx.utils.dates import detect_date_column_indices, excel_serial_to_isodate
 from agent_xlsx.utils.errors import SheetNotFoundError, handle_error
 from agent_xlsx.utils.validation import (
     col_letter_to_index,
@@ -275,12 +275,30 @@ def _apply_date_conversion(
     path: Path,
     target_sheet: str | int,
 ) -> list[list]:
-    """Best-effort conversion of Excel serial numbers to ISO dates."""
+    """Best-effort conversion of Excel serial numbers to ISO dates.
+
+    Uses index-based detection so it works in both normal and --no-header mode.
+    """
     try:
         sheet_arg = target_sheet if isinstance(target_sheet, str) else None
-        date_cols = detect_date_columns(str(path), sheet_arg)
-        if date_cols:
-            rows = convert_date_values(rows, list(df.columns), set(date_cols.keys()))
+        date_indices = detect_date_column_indices(str(path), sheet_arg)
+        if not date_indices:
+            return rows
+        for row in rows:
+            for idx in date_indices:
+                if idx >= len(row):
+                    continue
+                val = row[idx]
+                # --no-header makes all columns String; coerce numeric strings
+                if isinstance(val, str):
+                    try:
+                        val = float(val)
+                    except (ValueError, TypeError):
+                        continue
+                if isinstance(val, (int, float)) and val == val and val > 0:
+                    converted = excel_serial_to_isodate(float(val))
+                    if converted is not None:
+                        row[idx] = converted
     except Exception:
         pass  # date detection is best-effort; don't break reads
     return rows

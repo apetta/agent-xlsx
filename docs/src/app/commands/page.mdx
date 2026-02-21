@@ -37,7 +37,7 @@ All errors return structured JSON with an error code, message, and actionable su
 }
 ```
 
-Error codes: `FILE_NOT_FOUND`, `INVALID_FORMAT`, `SHEET_NOT_FOUND`, `RANGE_INVALID`, `EXCEL_REQUIRED`, `ASPOSE_NOT_INSTALLED`, `LIBREOFFICE_REQUIRED`, `NO_RENDERING_BACKEND`, `MEMORY_EXCEEDED`, `VBA_NOT_FOUND`, `CHART_NOT_FOUND`.
+Error codes: `FILE_NOT_FOUND`, `INVALID_FORMAT`, `SHEET_NOT_FOUND`, `RANGE_INVALID`, `INVALID_REGEX`, `EXCEL_REQUIRED`, `ASPOSE_NOT_INSTALLED`, `LIBREOFFICE_REQUIRED`, `NO_RENDERING_BACKEND`, `MEMORY_EXCEEDED`, `VBA_NOT_FOUND`, `CHART_NOT_FOUND`.
 
 ## Probe
 
@@ -117,6 +117,8 @@ agent-xlsx search <file> "SUM(" --in-formulas     # Search formula strings
 
 **Output:** `matches[].{sheet, cell, column, row, value}` — max 25 results. Check `truncated` field.
 
+**`--in-formulas` output:** `matches[].{sheet, cell, formula}` — different schema, returns the formula string instead of the cell value.
+
 ## Export
 
 Bulk export sheet data.
@@ -172,7 +174,7 @@ agent-xlsx inspect <file> --hyperlinks Sales         # Hyperlinks
 **Flags:**
 
 - `--sheet` / `-s` (str) — Full sheet inspection (formulas, merges, tables, charts, comments, conditional formatting, validation, hyperlinks, freeze panes)
-- `--range` / `-r` (str) — Scope to range (requires --sheet)
+- `--range` / `-r` (str) — Scope to range (defaults to first sheet if --sheet not given)
 - `--names` (bool) — Named ranges only
 - `--charts` (bool) — Chart metadata only
 - `--vba` (bool) — Inspect VBA module presence
