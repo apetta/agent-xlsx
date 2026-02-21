@@ -5,7 +5,7 @@ description: "Interact with Excel files (.xlsx, .xlsm, .xlsb, .xls, .ods) using 
 
 # agent-xlsx
 
-XLSX CLI for AI agents. Structured JSON to stdout. Polars+fastexcel for data reads (7-10x faster than openpyxl), openpyxl for metadata/writes, three rendering engines for visual capture (Aspose → Excel → LibreOffice), oletools for VBA.
+XLSX CLI for AI agents. JSON to stdout by default (raw text for `--format csv|markdown`). Polars+fastexcel for data reads (7-10x faster than openpyxl), openpyxl for metadata/writes, three rendering engines for visual capture (Aspose → Excel → LibreOffice), oletools for VBA.
 
 ## Running
 
@@ -228,12 +228,12 @@ agent-xlsx vba suspect.xlsm --read-all        # Read all code
 11. **`-o` preserves original** — write/format save to a new file when `--output` specified
 12. **Screenshot needs an engine** — requires Excel, Aspose, or LibreOffice. See [backends.md](references/backends.md)
 13. **VBA read vs run** — oletools for read/analysis (cross-platform), xlwings for execution (Excel required)
-14. **500MB memory limit** — large files auto-chunk. Use `--limit` for big reads
+14. **Large files** — use `--limit` for big reads to manage memory
 15. **Writable: .xlsx and .xlsm only** — .xlsb, .xls, .ods are read-only
 
 ## Output Format
 
-JSON to stdout. Errors:
+JSON to stdout by default (raw text for `--format csv|markdown`). Errors:
 
 ```json
 {"error": true, "code": "SHEET_NOT_FOUND", "message": "...", "suggestions": ["..."]}

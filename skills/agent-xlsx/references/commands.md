@@ -1,6 +1,6 @@
 # Command Reference
 
-Complete flag reference for all agent-xlsx commands. All commands return JSON to stdout.
+Complete flag reference for all agent-xlsx commands. All commands return JSON to stdout by default. When using `--format csv` or `--format markdown`, raw text is written to stdout instead.
 
 ## Table of Contents
 
@@ -97,7 +97,7 @@ agent-xlsx search <file> <query> [flags]
 | `--in-formulas` | | bool | false | Search formula strings (openpyxl fallback) |
 | `--no-header` | | bool | false | Treat row 1 as data, columns as Excel letters |
 
-**Output:** `matches[].{sheet, column, cell, value, row}` — `column` is always an Excel letter (A, B, H, etc.). Max 25 results. Check `truncated` field.
+**Output:** `matches[].{sheet, column, cell, value, row}` — `column` is always an Excel letter (A, B, H, etc.). Max 25 results. Check `truncated` field. With `--in-formulas`: `matches[].{sheet, cell, formula}` (no `column`, `row`, or `value`).
 
 ---
 

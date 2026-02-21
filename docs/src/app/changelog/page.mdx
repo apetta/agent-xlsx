@@ -2,7 +2,18 @@ export const metadata = { title: "Changelog" }
 
 # Changelog
 
-## V0.2.0 (FEBRUARY 2025)
+## V0.3.0 (FEBRUARY 2026)
+
+Date handling overhaul, docs site, and reliability fixes.
+
+- Added documentation site with full command reference, backend guide, and changelog
+- Overhauled date handling — index-based detection now works correctly in `--no-header` mode across `read`, `search`, `export`, and `probe`. Midnight datetimes normalised to date-only strings
+- Added `INVALID_REGEX` structured error for malformed regex patterns in `search --regex` (including Rust regex engine incompatibilities)
+- Further optimised print area handling in LibreOffice `_prepare_sheet_for_export` for better PDF export
+- Added save-path guard in `format` and `sheet` commands — non-writable extensions now fall back to `.xlsx` instead of silently saving OOXML content with the original extension
+- Updated skill and command reference docs for output format clarity (`--format csv|markdown`), `--in-formulas` output schema, and engine availability per command
+
+## V0.2.0 (FEBRUARY 2026)
 
 Non-tabular data support, multi-range reads, and compact output.
 
@@ -19,7 +30,7 @@ Non-tabular data support, multi-range reads, and compact output.
 - Improved formula detection in compact mode
 - Added `aspose-cells-python` as a direct dependency
 
-## V0.1.1 (FEBRUARY 2025)
+## V0.1.1 (FEBRUARY 2026)
 
 CLI polish release.
 
@@ -29,7 +40,7 @@ CLI polish release.
 - Fixed `-o` flag conflict on `read --offset`
 - Fixed double period in help text descriptions
 
-## V0.1.0 (FEBRUARY 2025)
+## V0.1.0 (FEBRUARY 2026)
 
 Initial release.
 
