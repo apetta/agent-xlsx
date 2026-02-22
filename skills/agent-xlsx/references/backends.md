@@ -13,7 +13,7 @@ Priority differs by command:
 
 **objects:**
 ```
-1. Excel (xlwings) → 2. Aspose.Cells → ExcelRequiredError (no LibreOffice support)
+1. Aspose.Cells → 2. Excel (xlwings) → ExcelRequiredError (no LibreOffice support)
 ```
 
 Force a specific engine with `--engine excel|aspose|libreoffice`. Available engines vary by command — see the Command × Engine Matrix below.

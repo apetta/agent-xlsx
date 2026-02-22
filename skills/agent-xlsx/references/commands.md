@@ -92,7 +92,7 @@ agent-xlsx search <file> <query> [flags]
 | Flag | Alias | Type | Default | Description |
 |------|-------|------|---------|-------------|
 | `--sheet` | `-s` | str | all | Target specific sheet |
-| `--regex` | | bool | false | Treat query as regex |
+| `--regex` | `-r` | bool | false | Treat query as regex |
 | `--ignore-case` | `-i` | bool | false | Case-insensitive match |
 | `--in-formulas` | | bool | false | Search formula strings (openpyxl fallback) |
 | `--no-header` | | bool | false | Treat row 1 as data, columns as Excel letters |
@@ -148,7 +148,7 @@ agent-xlsx inspect <file> [flags]
 | Flag | Alias | Type | Default | Description |
 |------|-------|------|---------|-------------|
 | `--sheet` | `-s` | str | | Full sheet inspection (formulas, merges, tables, charts, comments, conditional formatting, validation, hyperlinks, freeze panes) |
-| `--range` | | str | | Scope to range (defaults to first sheet if --sheet not given) |
+| `--range` | `-r` | str | | Scope to range (defaults to first sheet if --sheet not given) |
 | `--names` | | bool | false | Named ranges only |
 | `--charts` | | bool | false | Chart metadata only |
 | `--vba` | | bool | false | Inspect VBA modules |
@@ -277,7 +277,7 @@ agent-xlsx recalc <file> [flags]
 | `--engine` | `-e` | str | auto | Force: excel, aspose, libreoffice |
 | `--timeout` | | int | 60 | Seconds (LibreOffice only) |
 
-`--check-only` output: `error_summary.{error_type: {count, locations[]}}` — finds #REF!, #DIV/0!, #NAME?, #NULL!, #N/A, #VALUE!
+`--check-only` output: `error_summary.{error_type: {count, locations[]}}` — finds #REF!, #DIV/0!, #NAME?, #NULL!, #N/A, #VALUE!, #NUM!
 
 ---
 
