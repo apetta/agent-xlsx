@@ -17,7 +17,7 @@ from agent_xlsx.utils.validation import _normalise_shell_ref, validate_file
 @handle_error
 def write_cmd(
     file: str = typer.Argument(..., help="Path to the Excel file"),
-    cell: str = typer.Argument(..., help="Cell reference (e.g. 'A1', '2022!A1', or 'Sheet1!A1:C3')"),
+    cell: str = typer.Argument(..., help="Cell reference (e.g. 'A1', '2022!A1', or 'Sheet1!A1:C3')"),  # noqa: E501
     value: Optional[str] = typer.Argument(None, help="Value to write (for single cell)"),
     formula: bool = typer.Option(False, "--formula", help="Treat value as a formula"),
     json: Optional[str] = typer.Option(None, "--json", help="JSON array data for range write"),

@@ -2,6 +2,23 @@ export const metadata = { title: "Changelog" }
 
 # Changelog
 
+## V0.4.0 (FEBRUARY 2026)
+
+Security hardening, untrusted-data tagging, and engine unification.
+
+- Added `_data_origin: untrusted_spreadsheet` field to all structured JSON responses — provides per-call provenance context for agent consumers across `read`, `search`, `probe`, `overview`, `inspect`, `format --read`, `export --format json`, and `vba`
+- Added `--json-envelope` flag to `export` — wraps CSV and Markdown stdout in a JSON envelope with `_data_origin` for agent pipelines that need provenance on all output formats
+- Added automatic VBA security pre-check before every macro execution — macros with `risk_level=high` are blocked and raise `MacroBlockedError`; use `--allow-risky` to override when the file source is explicitly trusted
+- Added extension gate to `vba --run` — macro execution now requires `.xlsm` or `.xlsb`; plain `.xlsx` files are rejected with a structured error
+- Added macro name validation to `vba --run` — rejects names containing path separators or shell meta-characters
+- Added XXE protection — `defusedxml.defuse_stdlib()` is activated at import time, hardening all stdlib XML parsers used by openpyxl and oletools against entity expansion and DTD retrieval attacks
+- Fixed chart export filename sanitisation — strips path separators and `..` sequences to prevent path traversal via crafted chart names
+- Fixed `copy_formatting()` missing the writable-extension guard (now consistent with `write_cells()` and `apply_formatting()`)
+- Fixed `ASPOSE_LICENSE_DATA` warning — now emitted on env-var *presence*, even when `ASPOSE_LICENSE_PATH` takes precedence, since the env var remains visible in process listings
+- Unified engine auto-detection order across `objects`, `recalc`, and `screenshot` — priority is now consistently Aspose → Excel → LibreOffice via a shared `resolve_engine` utility
+- Added 26 security regression tests covering data-origin tagging, VBA gates, and credential warning behaviour
+- Added lint-and-test CI gate before PyPI publish; pinned all GitHub Actions to immutable commit SHAs
+
 ## V0.3.0 (FEBRUARY 2026)
 
 Date handling overhaul, docs site, and reliability fixes.

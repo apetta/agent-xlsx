@@ -125,7 +125,7 @@ def vba(
     allow_risky: bool = typer.Option(
         False,
         "--allow-risky",
-        help="Override automatic security block for high-risk macros (use only when the file source is explicitly trusted)",
+        help="Override automatic security block for high-risk macros (use only when the file source is explicitly trusted)",  # noqa: E501
     ),
 ) -> None:
     """VBA operations: list, read, run, and analyse macros.

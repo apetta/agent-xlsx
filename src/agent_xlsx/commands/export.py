@@ -157,7 +157,7 @@ def _export_csv(df: Any, output_path: Optional[str], json_envelope: bool = False
 
 
 def _export_markdown(df: Any, output_path: Optional[str], json_envelope: bool = False) -> None:
-    """Export as Markdown table — either to file or stdout (optionally wrapped in a JSON envelope)."""
+    """Export as Markdown table — either to file or stdout (optionally wrapped in a JSON envelope)."""  # noqa: E501
     lines = _df_to_markdown(df)
     md_str = "\n".join(lines) + "\n"
 

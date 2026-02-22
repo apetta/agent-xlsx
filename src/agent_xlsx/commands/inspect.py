@@ -10,7 +10,6 @@ from typing import Optional
 import typer
 
 from agent_xlsx.cli import app
-from agent_xlsx.formatters import json_formatter
 from agent_xlsx.formatters.json_formatter import output_spreadsheet_data
 from agent_xlsx.formatters.token_optimizer import cap_list, summarise_formulas
 from agent_xlsx.utils.constants import MAX_FORMULA_CELLS, MAX_LOCATIONS

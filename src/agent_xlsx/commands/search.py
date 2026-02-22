@@ -8,7 +8,7 @@ import typer
 
 from agent_xlsx.adapters.polars_adapter import search_values
 from agent_xlsx.cli import app
-from agent_xlsx.formatters.json_formatter import output, output_spreadsheet_data
+from agent_xlsx.formatters.json_formatter import output_spreadsheet_data
 from agent_xlsx.utils.constants import MAX_SEARCH_RESULTS
 from agent_xlsx.utils.errors import InvalidRegexError, SheetNotFoundError, handle_error
 from agent_xlsx.utils.validation import validate_file

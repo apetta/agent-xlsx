@@ -3,6 +3,7 @@
 # Harden stdlib XML parsers against XXE, entity expansion bombs, and DTD
 # retrieval *before* any library (openpyxl, oletools, …) is imported.
 import defusedxml
+
 defusedxml.defuse_stdlib()
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"

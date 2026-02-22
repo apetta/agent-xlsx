@@ -8,7 +8,6 @@ Groups:
 
 import json
 
-import pytest
 from typer.testing import CliRunner
 
 from agent_xlsx.cli import app
