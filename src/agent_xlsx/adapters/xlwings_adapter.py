@@ -482,7 +482,8 @@ def export_chart(
                     ["Use 'get_objects' to list available charts"],
                 )
 
-            out_path = output_dir / f"{chart_name}.png"
+            safe_name = chart_name.replace("/", "_").replace("\\", "_").replace("..", "_")
+            out_path = output_dir / f"{safe_name}.png"
             target_chart.to_png(str(out_path))
 
             return {
