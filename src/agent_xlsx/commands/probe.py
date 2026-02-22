@@ -6,7 +6,7 @@ import typer
 
 from agent_xlsx.adapters.polars_adapter import probe_workbook
 from agent_xlsx.cli import app
-from agent_xlsx.formatters.json_formatter import output
+from agent_xlsx.formatters.json_formatter import output, output_spreadsheet_data
 from agent_xlsx.utils.errors import handle_error
 from agent_xlsx.utils.validation import validate_file
 
@@ -62,4 +62,4 @@ def probe(
         no_header=no_header,
     )
 
-    output(result)
+    output_spreadsheet_data(result)

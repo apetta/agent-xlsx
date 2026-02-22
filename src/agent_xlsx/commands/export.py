@@ -13,7 +13,7 @@ from agent_xlsx.adapters.polars_adapter import (
     read_sheet_data,
 )
 from agent_xlsx.cli import app
-from agent_xlsx.formatters.json_formatter import output
+from agent_xlsx.formatters.json_formatter import output, output_spreadsheet_data
 from agent_xlsx.utils.dataframe import apply_compact
 from agent_xlsx.utils.dates import detect_date_column_indices, excel_serial_to_isodate
 from agent_xlsx.utils.errors import SheetNotFoundError, handle_error
@@ -42,6 +42,15 @@ def export(
         "--compact/--no-compact",
         help="Drop fully-null columns from output to reduce token waste (default: on).",
     ),
+    json_envelope: bool = typer.Option(
+        False,
+        "--json-envelope",
+        help=(
+            "Wrap csv/markdown stdout output in a JSON envelope with _data_origin tag. "
+            "Useful for agent consumers that need provenance metadata on all outputs. "
+            "Ignored when --output is specified."
+        ),
+    ),
 ) -> None:
     """Export a sheet to JSON, CSV, or Markdown format.
 
@@ -68,9 +77,9 @@ def export(
 
     fmt = format_.lower()
     if fmt == "csv":
-        _export_csv(df, output_path)
+        _export_csv(df, output_path, json_envelope)
     elif fmt == "markdown":
-        _export_markdown(df, output_path)
+        _export_markdown(df, output_path, json_envelope)
     else:
         _export_json(df, output_path, path, target_sheet, elapsed_ms)
 
@@ -123,11 +132,11 @@ def _export_json(
             }
         )
     else:
-        output(data)
+        output_spreadsheet_data(data)
 
 
-def _export_csv(df: Any, output_path: Optional[str]) -> None:
-    """Export as CSV — either to file or stdout."""
+def _export_csv(df: Any, output_path: Optional[str], json_envelope: bool = False) -> None:
+    """Export as CSV — either to file or stdout (optionally wrapped in a JSON envelope)."""
     csv_str = df.write_csv()
 
     if output_path:
@@ -141,12 +150,14 @@ def _export_csv(df: Any, output_path: Optional[str]) -> None:
                 "row_count": len(df),
             }
         )
+    elif json_envelope:
+        output_spreadsheet_data({"format": "csv", "data": csv_str, "row_count": len(df)})
     else:
         sys.stdout.write(csv_str)
 
 
-def _export_markdown(df: Any, output_path: Optional[str]) -> None:
-    """Export as Markdown table — either to file or stdout."""
+def _export_markdown(df: Any, output_path: Optional[str], json_envelope: bool = False) -> None:
+    """Export as Markdown table — either to file or stdout (optionally wrapped in a JSON envelope)."""
     lines = _df_to_markdown(df)
     md_str = "\n".join(lines) + "\n"
 
@@ -161,6 +172,8 @@ def _export_markdown(df: Any, output_path: Optional[str]) -> None:
                 "row_count": len(df),
             }
         )
+    elif json_envelope:
+        output_spreadsheet_data({"format": "markdown", "data": md_str, "row_count": len(df)})
     else:
         sys.stdout.write(md_str)
 

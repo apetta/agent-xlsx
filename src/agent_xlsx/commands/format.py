@@ -7,6 +7,7 @@ import typer
 
 from agent_xlsx.cli import app
 from agent_xlsx.formatters import json_formatter
+from agent_xlsx.formatters.json_formatter import output_spreadsheet_data
 from agent_xlsx.utils.errors import AgentExcelError, handle_error
 from agent_xlsx.utils.validation import _normalise_shell_ref, validate_file
 
@@ -69,7 +70,7 @@ def format_cmd(
         if not read_sheet:
             read_sheet = _default_sheet(str(path))
         result = oxl.get_cell_formatting(str(path), read_sheet, read_cell)
-        json_formatter.output(result)
+        output_spreadsheet_data(result)
         return
 
     # --- Copy mode ---

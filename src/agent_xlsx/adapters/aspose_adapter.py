@@ -23,6 +23,7 @@ from agent_xlsx.utils.validation import index_to_col_letter
 # ---------------------------------------------------------------------------
 
 _LICENSE_APPLIED = False
+_LICENSE_DATA_WARNED = False  # tracks whether the ASPOSE_LICENSE_DATA warning has fired
 
 
 def is_aspose_available() -> bool:
@@ -37,7 +38,7 @@ def is_aspose_available() -> bool:
 
 def _apply_license() -> bool:
     """Apply the Aspose licence if configured. Returns True when licensed."""
-    global _LICENSE_APPLIED
+    global _LICENSE_APPLIED, _LICENSE_DATA_WARNED
     if _LICENSE_APPLIED:
         return True
 
@@ -46,6 +47,19 @@ def _apply_license() -> bool:
     lic_path = get_aspose_license_path()
     if lic_path is None:
         return False
+
+    # Warn on *presence* of ASPOSE_LICENSE_DATA regardless of which source was selected.
+    # The env var is visible in ps aux even when ASPOSE_LICENSE_PATH takes precedence.
+    # Goes to stderr to keep stdout clean. Fires once per process.
+    import os as _os
+    if _os.environ.get("ASPOSE_LICENSE_DATA") and not _LICENSE_DATA_WARNED:
+        _LICENSE_DATA_WARNED = True
+        import sys as _sys
+        _sys.stderr.write(
+            "[agent-xlsx] Warning: ASPOSE_LICENSE_DATA is present in the environment "
+            "and visible in process listings (ps aux). "
+            "Consider removing it or switching to ASPOSE_LICENSE_PATH exclusively.\n"
+        )
 
     try:
         from aspose.cells import License
