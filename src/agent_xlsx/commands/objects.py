@@ -31,7 +31,7 @@ def objects(
 ) -> None:
     """List or export embedded objects (charts, shapes, pictures).
 
-    Uses Excel (xlwings) when available, falls back to Aspose.Cells.
+    Uses Aspose.Cells when available, falls back to Excel (xlwings).
     Use without --export to list all objects, or with --export to save
     a specific chart as PNG.
     """
@@ -39,40 +39,10 @@ def objects(
     filepath = str(path)
 
     # Engine selection
-    from agent_xlsx.adapters.xlwings_adapter import is_excel_available
+    from agent_xlsx.utils.engine import resolve_engine
 
-    use_engine = None
-    engine_lower = engine.lower()
-
-    if engine_lower == "excel":
-        if not is_excel_available():
-            from agent_xlsx.utils.errors import ExcelRequiredError
-
-            raise ExcelRequiredError("objects")
-        use_engine = "excel"
-    elif engine_lower == "aspose":
-        from agent_xlsx.adapters.aspose_adapter import is_aspose_available
-        from agent_xlsx.utils.errors import AsposeNotInstalledError
-
-        if not is_aspose_available():
-            raise AsposeNotInstalledError()
-        use_engine = "aspose"
-    elif engine_lower == "auto":
-        if is_excel_available():
-            use_engine = "excel"
-        else:
-            from agent_xlsx.adapters.aspose_adapter import is_aspose_available
-
-            if is_aspose_available():
-                use_engine = "aspose"
-            else:
-                from agent_xlsx.utils.errors import ExcelRequiredError
-
-                raise ExcelRequiredError("objects")
-    else:
-        from agent_xlsx.utils.errors import ExcelRequiredError
-
-        raise ExcelRequiredError("objects")
+    # libreoffice=False: no LibreOffice object-extraction adapter exists.
+    use_engine = resolve_engine("objects", engine, libreoffice=False)
 
     if export:
         if use_engine == "aspose":

@@ -13,7 +13,7 @@ import typer
 
 from agent_xlsx.cli import app
 from agent_xlsx.formatters.json_formatter import output
-from agent_xlsx.utils.errors import ExcelRequiredError, NoRenderingBackendError, handle_error
+from agent_xlsx.utils.errors import handle_error
 from agent_xlsx.utils.validation import parse_range, validate_file
 
 
@@ -81,42 +81,9 @@ def screenshot(
         effective_range = range_opt
 
     # Backend selection: explicit --engine or auto-detect
-    from agent_xlsx.adapters.libreoffice_adapter import is_libreoffice_available
-    from agent_xlsx.adapters.xlwings_adapter import is_excel_available
+    from agent_xlsx.utils.engine import resolve_engine
 
-    use_engine = None  # "excel", "aspose", or "libreoffice"
-    engine_lower = engine.lower()
-
-    if engine_lower == "excel":
-        if not is_excel_available():
-            raise ExcelRequiredError("screenshot")
-        use_engine = "excel"
-    elif engine_lower == "aspose":
-        from agent_xlsx.adapters.aspose_adapter import is_aspose_available
-        from agent_xlsx.utils.errors import AsposeNotInstalledError
-
-        if not is_aspose_available():
-            raise AsposeNotInstalledError()
-        use_engine = "aspose"
-    elif engine_lower in ("libreoffice", "lo"):
-        if not is_libreoffice_available():
-            from agent_xlsx.utils.errors import LibreOfficeNotFoundError
-
-            raise LibreOfficeNotFoundError()
-        use_engine = "libreoffice"
-    elif engine_lower == "auto":
-        from agent_xlsx.adapters.aspose_adapter import is_aspose_available
-
-        if is_aspose_available():
-            use_engine = "aspose"
-        elif is_excel_available():
-            use_engine = "excel"
-        elif is_libreoffice_available():
-            use_engine = "libreoffice"
-        else:
-            raise NoRenderingBackendError("screenshot")
-    else:
-        raise NoRenderingBackendError("screenshot")
+    use_engine = resolve_engine("screenshot", engine)
 
     if use_engine == "excel":
         from agent_xlsx.adapters.xlwings_adapter import screenshot as _screenshot
