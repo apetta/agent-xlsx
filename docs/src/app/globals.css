@@ -268,6 +268,15 @@ code {
   @apply dark:from-neutral-200 dark:to-neutral-500;
 }
 
+.prose h4 {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  color: var(--muted-foreground);
+}
+
 .prose p {
   margin-bottom: 1.25rem;
   line-height: 1.7;

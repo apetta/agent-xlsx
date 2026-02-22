@@ -96,6 +96,21 @@ agent-xlsx read <file> --no-compact               # Keep null columns
 
 **Range** is positional: `"A1:F50"` or `"Sheet1!A1:F50"`. Comma-separated for multi-range: `"Sheet1!A1:C10,E1:G10"`
 
+### Memory limits
+
+To prevent excessive memory usage when reading large files, agent-xlsx enforces row limits on data reads:
+
+- **Default limit:** 100 rows per read operation
+- **Maximum limit:** 10,000 rows
+
+Use the `--limit` flag to adjust within the allowed range:
+
+```bash
+agent-xlsx read data.xlsx "A1:Z10000" --limit 2000
+```
+
+When output is truncated, the JSON response includes a `"truncated": true` flag so agents know to narrow their query or paginate with `--offset`.
+
 ## Search
 
 Find values across all sheets. Returns cell references with each match.

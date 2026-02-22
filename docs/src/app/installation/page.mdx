@@ -85,54 +85,6 @@ RUN pip install agent-xlsx
 RUN agent-xlsx --help
 ```
 
-## AI agent setup
-
-Add agent-xlsx to your agent's instructions so it knows when and how to use it.
-
-### Claude Code
-
-Add to your project's `CLAUDE.md`:
-
-```markdown
-## Excel files
-
-Use `agent-xlsx` CLI for all Excel file operations. Always `probe` first.
-
-- `agent-xlsx probe <file>` — profile structure (<10ms)
-- `agent-xlsx read <file> "A1:F50"` — extract data
-- `agent-xlsx search <file> "query"` — search across sheets
-- `agent-xlsx screenshot <file>` — visual capture
-- `agent-xlsx write <file> "A1" "value"` — write values
-```
-
-### Cursor
-
-Add to `.cursor/rules/agent-xlsx.mdc`:
-
-```markdown
----
-description: Use agent-xlsx CLI for Excel file operations
-globs: ["*.xlsx", "*.xlsm", "*.xlsb", "*.xls", "*.ods"]
----
-
-Use `agent-xlsx` CLI for all Excel file operations. Always `probe` first.
-
-- `agent-xlsx probe <file>` — profile structure (<10ms)
-- `agent-xlsx read <file> "A1:F50"` — extract data
-- `agent-xlsx search <file> "query"` — search across sheets
-- `agent-xlsx screenshot <file>` — visual capture
-```
-
-### Other agents
-
-Add to `AGENTS.md`, `codex.md`, or your agent's instruction file:
-
-```markdown
-Use `agent-xlsx` CLI for all Excel file operations.
-Always run `agent-xlsx probe <file>` first to understand the workbook structure.
-Full command reference: https://agent-xlsx.dev/commands
-```
-
 ## Rendering engines
 
 Aspose.Cells is included as a dependency and works out of the box for `screenshot` and `recalc` commands (in evaluation mode). For watermark-free rendering, set a licence. Alternatively, install LibreOffice as a free option.

@@ -6,26 +6,16 @@ agent-xlsx uses three rendering engines for the `screenshot`, `objects`, and `re
 
 ## AUTO-DETECTION PRIORITY
 
-### screenshot, recalc
+### screenshot, recalc, objects
 
 ```
 1. Aspose.Cells      — aspose-cells-python installed
    ↓ not found
 2. Excel (xlwings)   — Microsoft Excel installed
    ↓ not found
-3. LibreOffice       — soffice on PATH or standard locations
+3. LibreOffice       — soffice on PATH or standard locations  (screenshot, recalc only)
    ↓ not found
 4. NoRenderingBackendError
-```
-
-### objects
-
-```
-1. Excel (xlwings)   — Microsoft Excel installed
-   ↓ not found
-2. Aspose.Cells      — aspose-cells-python installed
-   ↓ not found
-3. ExcelRequiredError (no LibreOffice support)
 ```
 
 Force a specific engine:
@@ -97,7 +87,7 @@ Each invocation uses a unique temporary user profile to avoid lock conflicts.
 
 The `--timeout` flag is LibreOffice-specific (default: 30 seconds for screenshot, 60 seconds for recalc).
 
-## COMMAND × ENGINE MATRIX
+## COMMAND × ENGINE SUPPORT
 
 - `screenshot` — Excel, Aspose, LibreOffice
 - `objects` (list) — Excel, Aspose

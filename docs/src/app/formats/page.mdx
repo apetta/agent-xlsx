@@ -49,18 +49,3 @@ Only `.xlsx` and `.xlsm` files support write operations. Attempting to write to 
 agent-xlsx includes automatic date handling. Excel stores dates as serial numbers (e.g. `45658` for 2024-12-31) with a date number format. The Polars adapter (via fastexcel/calamine) detects these formats and parses date columns as ISO 8601 strings (`YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS`) in the output.
 
 Date handling is applied automatically across `read`, `search`, `export`, and `probe` commands. This is always-on best-effort — columns with date number formats are converted; those without (e.g. General format) are left as-is.
-
-## MEMORY LIMITS
-
-To prevent excessive memory usage when reading large files, agent-xlsx enforces row limits on data reads:
-
-- **Default limit:** 100 rows per read operation
-- **Maximum limit:** 10,000 rows
-
-Use the `--limit` flag to adjust within the allowed range:
-
-```bash
-agent-xlsx read data.xlsx "A1:Z10000" --limit 2000
-```
-
-When output is truncated, the JSON response includes a `"truncated": true` flag so agents know to narrow their query or paginate with `--offset`.
