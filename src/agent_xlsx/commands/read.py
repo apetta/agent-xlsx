@@ -9,7 +9,7 @@ import typer
 
 from agent_xlsx.adapters.polars_adapter import get_sheet_names, read_exact_range, read_sheet_data
 from agent_xlsx.cli import app
-from agent_xlsx.formatters.json_formatter import output
+from agent_xlsx.formatters.json_formatter import output, output_spreadsheet_data
 from agent_xlsx.utils.constants import DEFAULT_LIMIT, DEFAULT_OFFSET, MAX_READ_ROWS
 from agent_xlsx.utils.dataframe import apply_compact
 from agent_xlsx.utils.dates import detect_date_column_indices, excel_serial_to_isodate
@@ -177,7 +177,7 @@ def read(
             "compact": compact,
             "read_time_ms": elapsed_ms,
         }
-        output(result)
+        output_spreadsheet_data(result)
         return
 
     # --- Single-range path (existing behaviour, backward compatible) ---
@@ -223,7 +223,7 @@ def read(
         "read_time_ms": elapsed_ms,
     }
 
-    output(result)
+    output_spreadsheet_data(result)
 
 
 # ---------------------------------------------------------------------------
@@ -382,7 +382,7 @@ def _read_with_formulas(
         "read_time_ms": elapsed_ms,
     }
 
-    output(result)
+    output_spreadsheet_data(result)
 
 
 def _output_csv(df) -> None:

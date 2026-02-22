@@ -7,7 +7,7 @@ from pathlib import Path
 import typer
 
 from agent_xlsx.cli import app
-from agent_xlsx.formatters.json_formatter import output
+from agent_xlsx.formatters.json_formatter import output, output_spreadsheet_data
 from agent_xlsx.utils.constants import MAX_FORMULA_PATTERNS, VBA_EXTENSIONS
 from agent_xlsx.utils.errors import handle_error
 from agent_xlsx.utils.validation import file_size_bytes, validate_file
@@ -150,4 +150,4 @@ def overview(
         "total_chart_count": total_chart_count,
     }
 
-    output(result)
+    output_spreadsheet_data(result)

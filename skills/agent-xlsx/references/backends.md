@@ -51,6 +51,11 @@ Aspose.Cells is included as a core dependency of agent-xlsx — no separate inst
 
 Priority: env var → config file. Licence applied once per process (cached).
 
+> **Security note:** Prefer `ASPOSE_LICENSE_PATH` (file path) over `ASPOSE_LICENSE_DATA`
+> (base64 inline). Base64 licence data stored as an env var is visible in `ps aux` and can
+> accidentally land in shell history (`.bashrc`, `.zshrc`) or CI/CD logs. When
+> `ASPOSE_LICENSE_DATA` is detected, agent-xlsx automatically emits a warning to stderr.
+
 Evaluation mode output includes `"evaluation_mode": true` and `"evaluation_notice"` in JSON.
 
 ## LibreOffice

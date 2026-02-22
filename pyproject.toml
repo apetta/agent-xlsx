@@ -61,5 +61,10 @@ select = ["E", "F", "I", "N", "W"]
 
 [dependency-groups]
 dev = [
+    "pytest>=8.0",
+    "pytest-mock>=3.14",
     "ruff>=0.15.0",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

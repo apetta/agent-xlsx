@@ -13,6 +13,15 @@ def output(data: dict[str, Any]) -> None:
     sys.stdout.write("\n")
 
 
+def output_spreadsheet_data(data: dict[str, Any]) -> None:
+    """Output spreadsheet-sourced content, automatically tagged as untrusted external data.
+
+    Prepends ``_data_origin`` so any consuming LLM has per-call provenance context —
+    a prompt-injection boundary that requires no skill-level instructions.
+    """
+    output({"_data_origin": "untrusted_spreadsheet", **data})
+
+
 def _serialise(obj: Any) -> Any:
     """Handle non-standard types during JSON serialisation."""
     import datetime

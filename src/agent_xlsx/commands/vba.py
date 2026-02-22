@@ -5,12 +5,14 @@ without requiring Microsoft Excel. Macro execution uses xlwings and requires
 a local Excel installation.
 """
 
+import re as _re
 from typing import Any, Optional
 
 import typer
 
 from agent_xlsx.cli import app
-from agent_xlsx.formatters.json_formatter import output
+from agent_xlsx.formatters.json_formatter import output, output_spreadsheet_data
+from agent_xlsx.utils.constants import VBA_EXTENSIONS
 from agent_xlsx.utils.errors import AgentExcelError, handle_error
 from agent_xlsx.utils.validation import validate_file
 
@@ -26,6 +28,32 @@ class VbaModuleNotFoundError(AgentExcelError):
             if available
             else ["No VBA modules found in this file"],
         )
+
+
+class MacroBlockedError(AgentExcelError):
+    """Raised when a VBA security pre-check blocks macro execution (risk_level=high)."""
+
+    def __init__(self, security_report: dict[str, Any]):
+        super().__init__(
+            "MACRO_BLOCKED",
+            f"Macro execution blocked: security analysis returned "
+            f"risk_level '{security_report.get('risk_level', 'unknown')}'.",
+            [
+                "Run 'agent-xlsx vba <file> --security' to review the full report.",
+                "Pass '--allow-risky' to override if you trust this file.",
+            ],
+        )
+        self._security_report = security_report
+
+    def to_dict(self) -> dict[str, Any]:
+        result = super().to_dict()
+        result["security_check"] = {
+            "risk_level": self._security_report.get("risk_level"),
+            "auto_execute_triggers": self._security_report.get("auto_execute", []),
+            "suspicious": self._security_report.get("suspicious", []),
+            "iocs": self._security_report.get("iocs", []),
+        }
+        return result
 
 
 def _list_modules(filepath: str) -> dict[str, Any]:
@@ -94,6 +122,11 @@ def vba(
         None, "--args", help="JSON-encoded arguments for the macro (e.g. '[\"arg1\", 42]')"
     ),
     save: bool = typer.Option(False, "--save", help="Save workbook after macro execution"),
+    allow_risky: bool = typer.Option(
+        False,
+        "--allow-risky",
+        help="Override automatic security block for high-risk macros (use only when the file source is explicitly trusted)",
+    ),
 ) -> None:
     """VBA operations: list, read, run, and analyse macros.
 
@@ -104,6 +137,28 @@ def vba(
     filepath = str(path)
 
     if run:
+        # Gate 1: only VBA-capable formats support macro execution
+        if path.suffix.lower() not in VBA_EXTENSIONS:
+            raise AgentExcelError(
+                "INVALID_FORMAT",
+                f"Macro execution requires a VBA-capable format (.xlsm or .xlsb); "
+                f"'{path.suffix}' does not support macros.",
+                ["Use a .xlsm or .xlsb file to run macros"],
+            )
+
+        # Gate 2: validate macro name — reject path separators and shell meta-characters
+        if not _re.match(r"^[A-Za-z_][A-Za-z0-9_. ]*$", run):
+            raise AgentExcelError(
+                "INVALID_MACRO_NAME",
+                f"Macro name '{run}' contains invalid characters.",
+                ["Use format 'Module1.MacroName' or just 'MacroName'"],
+            )
+
+        # Gate 3: automatic security pre-check — runs silently before every execution
+        security_report = _security_analysis(filepath)
+        if security_report.get("risk_level") == "high" and not allow_risky:
+            raise MacroBlockedError(security_report)
+
         import json as json_mod
 
         from agent_xlsx.adapters.xlwings_adapter import run_macro
@@ -118,6 +173,12 @@ def vba(
             args=parsed_args,
             save=save,
         )
+        # Always attach security telemetry — visible to the calling agent
+        result["security_check"] = {
+            "risk_level": security_report.get("risk_level", "unknown"),
+            "auto_execute_triggers": security_report.get("auto_execute", []),
+            "suspicious_count": len(security_report.get("suspicious", [])),
+        }
         output(result)
         return
 
@@ -131,4 +192,4 @@ def vba(
         # Default to --list behaviour
         result = _list_modules(filepath)
 
-    output(result)
+    output_spreadsheet_data(result)

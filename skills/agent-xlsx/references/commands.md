@@ -116,6 +116,7 @@ agent-xlsx export <file> [flags]
 | `--output` | `-o` | str | stdout | Write to file |
 | `--no-header` | | bool | false | Treat row 1 as data, columns as Excel letters |
 | `--compact/--no-compact` | | bool | **true** | Drop fully-null columns from output. Use `--no-compact` to preserve all columns |
+| `--json-envelope` | | bool | false | Wrap csv/markdown stdout in a JSON envelope with `_data_origin` tag (ignored when `--output` is set) |
 
 ---
 
@@ -297,6 +298,13 @@ agent-xlsx vba <file> [flags]
 | `--run` | | str | | Execute macro (Excel required). Format: `"Module1.MacroName"` |
 | `--args` | | JSON | | Arguments for macro: `'[1, "hello"]'` |
 | `--save` | | bool | false | Save workbook after execution |
+| `--allow-risky` | | bool | false | Override automatic `MACRO_BLOCKED` block (only when file source is explicitly trusted) |
+
+> **Security (automatic):** Every `--run` silently performs a security analysis first. Macros with
+> `risk_level=high` are blocked and return a `MACRO_BLOCKED` error containing the full
+> `security_check` report. Pass `--allow-risky` to override. The `security_check` field
+> (risk_level, auto_execute_triggers, suspicious_count) is always present in successful run results.
+> The file must be `.xlsm` or `.xlsb`; macro names are validated for format.
 
 ---
 

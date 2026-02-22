@@ -11,6 +11,7 @@ import typer
 
 from agent_xlsx.cli import app
 from agent_xlsx.formatters import json_formatter
+from agent_xlsx.formatters.json_formatter import output_spreadsheet_data
 from agent_xlsx.formatters.token_optimizer import cap_list, summarise_formulas
 from agent_xlsx.utils.constants import MAX_FORMULA_CELLS, MAX_LOCATIONS
 from agent_xlsx.utils.errors import handle_error
@@ -76,7 +77,7 @@ def inspect_cmd(
         if not fmt_sheet:
             fmt_sheet = _default_sheet(str(path))
         result = oxl.get_cell_formatting(str(path), fmt_sheet, format_cell)
-        json_formatter.output(result)
+        output_spreadsheet_data(result)
         return
 
     if range_:
@@ -86,12 +87,12 @@ def inspect_cmd(
         summary = summarise_formulas(formulas, MAX_FORMULA_CELLS)
         summary["range"] = range_
         summary["sheet"] = r_sheet
-        json_formatter.output(summary)
+        output_spreadsheet_data(summary)
         return
 
     if names:
         meta = oxl.get_workbook_metadata(str(path))
-        json_formatter.output(
+        output_spreadsheet_data(
             {
                 "named_ranges": meta["named_ranges"],
                 "count": meta["named_range_count"],
@@ -110,7 +111,7 @@ def inspect_cmd(
                         "chart_count": s["chart_count"],
                     }
                 )
-        json_formatter.output(
+        output_spreadsheet_data(
             {
                 "charts": charts_data,
                 "total_chart_count": meta["total_chart_count"],
@@ -120,7 +121,7 @@ def inspect_cmd(
 
     if vba:
         meta = oxl.get_workbook_metadata(str(path))
-        json_formatter.output(
+        output_spreadsheet_data(
             {
                 "has_vba": meta["has_vba"],
             }
@@ -131,7 +132,7 @@ def inspect_cmd(
         target_sheet = sheet or _default_sheet(str(path))
         comment_list = oxl.get_comments(str(path), target_sheet)
         capped = cap_list(comment_list, MAX_LOCATIONS)
-        json_formatter.output(
+        output_spreadsheet_data(
             {
                 "sheet": target_sheet,
                 "comments": capped["items"],
@@ -148,7 +149,7 @@ def inspect_cmd(
             cf_sheet = conditional.split("!", 1)[0]
         cf_rules = oxl.get_conditional_formatting(str(path), cf_sheet)
         capped = cap_list(cf_rules, MAX_LOCATIONS)
-        json_formatter.output(
+        output_spreadsheet_data(
             {
                 "sheet": cf_sheet,
                 "rules": capped["items"],
@@ -161,7 +162,7 @@ def inspect_cmd(
     if validation:
         val_rules = oxl.get_data_validations(str(path), validation)
         capped = cap_list(val_rules, MAX_LOCATIONS)
-        json_formatter.output(
+        output_spreadsheet_data(
             {
                 "sheet": validation,
                 "validations": capped["items"],
@@ -174,7 +175,7 @@ def inspect_cmd(
     if hyperlinks:
         link_list = oxl.get_hyperlinks(str(path), hyperlinks)
         capped = cap_list(link_list, MAX_LOCATIONS)
-        json_formatter.output(
+        output_spreadsheet_data(
             {
                 "sheet": hyperlinks,
                 "hyperlinks": capped["items"],
@@ -187,12 +188,12 @@ def inspect_cmd(
     if sheet:
         # Full sheet inspection — everything in one pass
         result = oxl.get_full_sheet_inspection(str(path), sheet)
-        json_formatter.output(result)
+        output_spreadsheet_data(result)
         return
 
     # --- Default: inspect all sheets with summary metadata ---
     meta = oxl.get_workbook_metadata(str(path))
-    json_formatter.output(meta)
+    output_spreadsheet_data(meta)
 
 
 def _default_sheet(filepath: str) -> str:

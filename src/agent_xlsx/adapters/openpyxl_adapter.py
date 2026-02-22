@@ -723,6 +723,8 @@ def copy_formatting(
             cell.number_format = source.number_format
 
         save_path = Path(output_path) if output_path else filepath
+        if save_path.suffix.lower() not in WRITABLE_EXTENSIONS:
+            save_path = save_path.with_suffix(".xlsx")
         wb.save(str(save_path))
 
         return {
