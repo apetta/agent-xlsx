@@ -13,19 +13,26 @@ uv tool install agent-xlsx   # or: pip install agent-xlsx
 agent-xlsx probe spreadsheet.xlsx
 ```
 
+## Agent Skill
+
+Give your AI agent built-in knowledge of agent-xlsx commands and workflows by installing it as a [skill](https://skills.sh/apetta/agent-xlsx/agent-xlsx):
+
+```bash
+npx skills add apetta/agent-xlsx
+```
+
+Works with [Claude Code](https://claude.ai/code), [Cursor](https://cursor.com), [Gemini CLI](https://geminicli.com), and [20+ other agents](https://agentskills.io). Browse and install from [skills.sh](https://skills.sh/apetta/agent-xlsx/agent-xlsx).
+
 ## Features
 
-- **Agent-first** — Structured JSON to stdout, optimised for AI context windows
-- **Fast** — Polars + fastexcel (Rust-based), 7-10x faster than openpyxl for data reads
+- **Agent-first** — Structured JSON to stdout, optimised for AI context windows. Consistent schema, truncation flags, and structured error codes
+- **Fast** — Polars + fastexcel (Rust-based), 7-10x faster than openpyxl for data reads. Scales to 100K+ rows
 - **Complete** — 14 commands for reading, writing, searching, screenshots, VBA, and more
-- **Three rendering engines** — pick one based on your environment:
-  - **xlwings** — Excel rendering (screenshot, objects, recalc, VBA execution). Requires Microsoft Excel
-  - **Aspose.Cells** — Cross-platform rendering (screenshot, objects, recalc). Headless, no Excel needed
-  - **LibreOffice** — Free rendering fallback (screenshot, recalc). Headless via soffice
+- **Three rendering engines** — [xlwings](https://www.xlwings.org/) (Excel, highest fidelity), [Aspose.Cells](https://pypi.org/project/aspose-cells-python/) (cross-platform, headless), [LibreOffice](https://www.libreoffice.org/) (free fallback). See [Backends](/backends)
 - **Non-tabular support** — `--no-header` mode for P&L reports, dashboards, and sheets where row 1 isn't a header
 - **Compact output** — Automatically drops null columns to minimise token waste
 - **Cross-platform** — macOS, Linux, Windows
-- **5 formats** — .xlsx, .xlsm, .xlsb, .xls, .ods
+- **5 formats** — .xlsx, .xlsm, .xlsb, .xls, .ods. See [Formats](/formats)
 
 ## Works with
 
@@ -49,36 +56,3 @@ agent-xlsx search data.xlsx "overdue" --ignore-case
 # Take HD screenshots
 agent-xlsx screenshot data.xlsx --sheet Sales
 ```
-
-## Why structured JSON?
-
-Commands return structured JSON to stdout by default. This provides:
-
-- **Token-efficient** — Compact output uses fewer tokens than raw cell dumps or verbose formats
-- **Predictable** — Consistent schema across all commands, easy to parse programmatically
-- **Truncation-safe** — Results are capped with `truncated` flags so agents know when to narrow queries
-- **Error-aware** — Errors return structured codes (`SHEET_NOT_FOUND`, `RANGE_INVALID`) with suggestions
-
-## Architecture
-
-Five specialised adapters, each chosen for what it does best:
-
-1. **Polars + fastexcel** — Data reads (probe, read, search, export). Rust-based, 7-10x faster than openpyxl
-2. **openpyxl** — Metadata and writes (overview, inspect, format, write, sheet). Full Excel format access
-3. **xlwings** — Excel rendering (screenshot, objects, recalc, VBA execution). Requires Microsoft Excel
-4. **Aspose.Cells** — Cross-platform rendering (screenshot, objects, recalc). Headless, no Excel needed
-5. **LibreOffice** — Free rendering fallback (screenshot, recalc). Headless via soffice
-
-## Performance
-
-- **Data commands** (`probe`, `read`, `search`, `export`) — instant. Polars + fastexcel (Rust) with zero-copy Arrow transfer. Scales to 100K+ rows without breaking a sweat.
-- **Metadata commands** (`overview`, `inspect`) — fast. openpyxl parses only what's needed.
-- **Rendering commands** (`screenshot`, `recalc`) — a few seconds per sheet. Three engines to choose from: Excel (highest fidelity), Aspose (cross-platform), LibreOffice (free).
-
-## Supported formats
-
-- **`.xlsx`** (Excel 2007+) — read, write, screenshot
-- **`.xlsm`** (Excel Macro) — read, write, VBA, screenshot
-- **`.xlsb`** (Excel Binary) — read, VBA, screenshot
-- **`.xls`** (Excel 97-2003) — read, VBA, screenshot
-- **`.ods`** (OpenDocument) — read, screenshot
