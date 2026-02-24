@@ -522,14 +522,16 @@ def search_values(
         if columns:
             from agent_xlsx.utils.validation import resolve_column_filter
 
-            # When range is active, columns are letters — load row-1 headers
-            # so header names can be resolved to those letters
+            # When range or no-header is active, df columns are letters — load
+            # row-1 headers from the already-open reader so header names can be
+            # resolved to column letters without opening the file a second time.
             col_headers = None
-            if range_spec:
+            if range_spec or no_header:
                 try:
-                    col_headers = get_sheet_headers(fpath, name)
+                    hdr_sheet = reader.load_sheet(name, n_rows=0)
+                    col_headers = [c.name for c in hdr_sheet.available_columns()]
                 except Exception:
-                    pass
+                    col_headers = None
             search_cols = resolve_column_filter(columns, list(df.columns), headers=col_headers)
         else:
             search_cols = list(df.columns)

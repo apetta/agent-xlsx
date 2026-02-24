@@ -67,5 +67,8 @@ dev = [
     "ruff>=0.15.0",
 ]
 
+[tool.ty.environment]
+python = ".venv"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -17,8 +17,9 @@ from agent_xlsx.utils.validation import _normalise_shell_ref, validate_file
 def format_cmd(
     file: str = typer.Argument(..., help="Path to the Excel file"),
     cell: str = typer.Argument(
-        ..., help="Cell or range reference (e.g. 'A1', '2022!A1', or 'Sheet1!A1:D10')"
-    ),  # noqa: E501
+        ...,
+        help="Cell, range, or comma-separated ranges (e.g. 'A1', 'A1:D10', 'A1:C1,B4')",
+    ),
     read: bool = typer.Option(False, "--read", help="Read formatting at the cell"),
     font: Optional[str] = typer.Option(
         None,
@@ -60,9 +61,29 @@ def format_cmd(
 
     from agent_xlsx.adapters import openpyxl_adapter as oxl
 
+    # Detect multi-range (comma-separated)
+    is_multi = "," in cell
+    if is_multi:
+        from agent_xlsx.utils.validation import parse_multi_range
+
+        ranges = parse_multi_range(cell)
+    else:
+        ranges = None
+
     # --- Read mode ---
     if read:
-        # Determine sheet for reading
+        if is_multi and ranges:
+            target_sheet = _resolve_sheet(cell, sheet, str(path), ranges)
+            results = []
+            for ri in ranges:
+                # Use start cell of each range as representative
+                cell_ref = ri["start"]
+                result = oxl.get_cell_formatting(str(path), target_sheet, cell_ref)
+                range_str = f"{ri['start']}:{ri['end']}" if ri.get("end") else ri["start"]
+                results.append({"range": range_str, "formatting": result})
+            output_spreadsheet_data({"results": results, "total_ranges": len(results)})
+            return
+
         read_sheet = sheet
         read_cell = cell
         if "!" in cell:
@@ -77,6 +98,26 @@ def format_cmd(
 
     # --- Copy mode ---
     if copy_from:
+        if is_multi and ranges:
+            target_sheet = _resolve_sheet(cell, sheet, str(path), ranges)
+            for ri in ranges:
+                range_str = f"{ri['start']}:{ri['end']}" if ri.get("end") else ri["start"]
+                oxl.copy_formatting(
+                    str(path),
+                    sheet_name=target_sheet,
+                    source_ref=copy_from,
+                    target_ref=range_str,
+                    output_path=output,
+                )
+            json_formatter.output(
+                {
+                    "status": "success",
+                    "source": copy_from,
+                    "ranges_formatted": len(ranges),
+                }
+            )
+            return
+
         target_sheet = sheet
         target_cell = cell
         if "!" in cell:
@@ -112,6 +153,31 @@ def format_cmd(
     fill_opts = _parse_json_opt(fill, "fill") if fill else None
     border_opts = _parse_json_opt(border, "border") if border else None
 
+    if is_multi and ranges:
+        target_sheet = _resolve_sheet(cell, sheet, str(path), ranges)
+        total_formatted = 0
+        for ri in ranges:
+            range_str = f"{ri['start']}:{ri['end']}" if ri.get("end") else ri["start"]
+            result = oxl.apply_formatting(
+                str(path),
+                sheet_name=target_sheet,
+                cell_ref=range_str,
+                font_opts=font_opts,
+                fill_opts=fill_opts,
+                border_opts=border_opts,
+                number_format=number_format,
+                output_path=output,
+            )
+            total_formatted += result.get("cells_formatted", 0)
+        json_formatter.output(
+            {
+                "status": "success",
+                "ranges_formatted": len(ranges),
+                "total_cells_formatted": total_formatted,
+            }
+        )
+        return
+
     target_sheet = sheet
     target_cell = cell
     if "!" in cell:
@@ -132,6 +198,24 @@ def format_cmd(
         output_path=output,
     )
     json_formatter.output(result)
+
+
+def _resolve_sheet(
+    cell: str,
+    sheet: str | None,
+    filepath: str,
+    ranges: list[dict],
+) -> str:
+    """Resolve the target sheet for multi-range operations.
+
+    Priority: explicit --sheet flag > sheet prefix in first range > default (first sheet).
+    """
+    if sheet:
+        return sheet
+    first_sheet = ranges[0].get("sheet") if ranges else None
+    if first_sheet:
+        return str(first_sheet)
+    return _default_sheet(filepath)
 
 
 def _parse_json_opt(json_str: str, label: str) -> dict:

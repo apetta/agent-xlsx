@@ -306,6 +306,19 @@ def test_search_columns_header_name_with_range_in_formulas(formula_xlsx):
     assert data["match_count"] == 1
 
 
+def test_search_columns_header_name_single_column_range(wide_xlsx):
+    """--columns by header name resolves with a single-column range (mirrors WDIEXCEL scenario)."""
+    # B6 = "CODE-005" (not overwritten by TARGET fixtures at row 10)
+    result = runner.invoke(
+        app,
+        ["search", str(wide_xlsx), "CODE-005", "--columns", "Code", "--range", "B2:B15"],
+    )
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert data["match_count"] == 1
+    assert data["matches"][0]["column"] == "B"
+
+
 # ---------------------------------------------------------------------------
 # Backward compatibility
 # ---------------------------------------------------------------------------

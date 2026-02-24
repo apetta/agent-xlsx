@@ -121,6 +121,18 @@ def test_read_headers_multi_range(tabular_xlsx):
         assert r["column_map"]["A"] == "Product"
 
 
+def test_read_headers_multi_range_wide_columns(tabular_xlsx):
+    """--headers resolves names for non-A columns on multi-range reads."""
+    result = runner.invoke(app, ["read", str(tabular_xlsx), "B5:C5,B8:C8", "--headers"])
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    for r in data["results"]:
+        assert "Revenue" in r["headers"]
+        assert "Region" in r["headers"]
+        assert "column_map" in r
+        assert r["column_map"]["B"] == "Revenue"
+
+
 def test_read_headers_multi_range_no_header_wins(tabular_xlsx):
     """--headers + --no-header on multi-range: --no-header wins."""
     result = runner.invoke(

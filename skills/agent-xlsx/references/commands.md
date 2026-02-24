@@ -166,7 +166,7 @@ agent-xlsx inspect <file> [flags]
 
 ## format
 
-Read or apply cell formatting.
+Read or apply cell formatting. Supports comma-separated multi-range for applying the same formatting to multiple non-contiguous ranges in one call.
 
 ```
 agent-xlsx format <file> <range> [flags]
@@ -182,6 +182,8 @@ agent-xlsx format <file> <range> [flags]
 | `--number-format` | | str | | Number format string (e.g. `"#,##0.00"`) |
 | `--copy-from` | | str | | Copy all formatting from this cell |
 | `--output` | `-o` | str | in-place | Save to new file |
+
+**Range** is positional: `"A1"`, `"A1:D10"`, or `"Sheet1!A1:D10"`. Comma-separated for multi-range: `"A1:C1,B4"` (sheet prefix carries forward). Multi-range works with `--font`, `--fill`, `--border`, `--number-format`, `--copy-from`, and `--read`.
 
 ---
 

@@ -131,8 +131,21 @@ def read(
 
     if is_multi:
         results = []
-        # Cache row-1 headers per sheet for --headers resolution
+
+        # Pre-load row-1 headers per sheet (single reader, one file open)
         _header_cache: dict[str, list[str]] = {}
+        if headers and not no_header:
+            import fastexcel
+
+            _hdr_reader = fastexcel.read_excel(str(path))
+            for ts in target_sheets:
+                cache_key = str(ts)
+                try:
+                    resolved = ts if isinstance(ts, str) else available[ts]
+                    _hdr_sheet = _hdr_reader.load_sheet(resolved, n_rows=0)
+                    _header_cache[cache_key] = [c.name for c in _hdr_sheet.available_columns()]
+                except Exception:
+                    _header_cache[cache_key] = []
 
         for target_sheet in target_sheets:
             sheet_name = target_sheet if isinstance(target_sheet, str) else available[target_sheet]
@@ -148,13 +161,7 @@ def read(
                     # Resolve column letters to row-1 header names
                     column_map = None
                     if headers and not no_header and ri.get("start"):
-                        cache_key = str(target_sheet)
-                        if cache_key not in _header_cache:
-                            try:
-                                _header_cache[cache_key] = get_sheet_headers(path, target_sheet)
-                            except Exception:
-                                _header_cache[cache_key] = []
-                        sheet_headers = _header_cache[cache_key]
+                        sheet_headers = _header_cache.get(str(target_sheet), [])
                         if sheet_headers:
                             column_map = {}
                             for col_letter in df.columns:
