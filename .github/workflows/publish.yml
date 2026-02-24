@@ -18,7 +18,7 @@ jobs:
 
       - run: uv sync --group dev
 
-      - uses: astral-sh/ruff-action@4919ec5cf1f49eff0871dbcea0da843445b837e6 # v3.6.1
+      - run: uv run ruff check && uv run ruff format --check
 
       - run: uv run pytest
 

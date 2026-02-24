@@ -601,25 +601,32 @@ The Polars + fastexcel backend is 7-10x faster than openpyxl for equivalent oper
 
 ## Development
 
-Clone and install:
+Clone, install, and set up hooks:
 
 ```bash
 git clone https://github.com/apetta/agent-xlsx.git
 cd agent-xlsx
-uv sync
+uv sync --group dev
+uv run pre-commit install --install-hooks -t pre-commit -t pre-push
 ```
 
-Run commands:
+This installs two git hooks automatically:
+
+- **pre-commit** — `ruff check --fix` + `ruff format` (runs on every commit)
+- **pre-push** — lint + format + `pytest` (full suite before pushing)
+
+Run commands locally:
 
 ```bash
 uv run agent-xlsx probe sample_data.xlsx
 ```
 
-Lint:
+Run checks manually:
 
 ```bash
-uv run ruff check src/
-uv run ruff format src/
+uv run ruff check src/ tests/
+uv run ruff format src/ tests/
+uv run pytest
 ```
 
 ### Project Structure
