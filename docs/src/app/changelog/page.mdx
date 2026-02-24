@@ -2,6 +2,23 @@ export const metadata = { title: "Changelog" }
 
 # Changelog
 
+## V0.5.0 (FEBRUARY 2026)
+
+Search precision, write auto-create, and developer experience.
+
+- Added `--columns` / `-c` flag to `search` — filter results to specific columns by letter (`A,B,C`) or header name (`"Indicator Name"`)
+- Added `--limit` / `-l` flag to `search` — cap result count (default 25, max 1000)
+- Added `--range` flag to `search` — restrict search to a cell range (e.g. `A1:D100` or `Sheet!A1:D100`). Composes with `--columns` and `--limit`
+- Added `--headers` flag to `read` — resolves column letters to row-1 header names in range reads, with `column_map` in output
+- Added write auto-create — writing to a non-existent `.xlsx` or `.xlsm` file now creates it automatically. Emits `"created": true` in output
+- Extended `--formula` flag in `write` to work with `--json` and `--from-csv` (previously single-cell only). Adds `=` prefix to strings missing it
+- Added write size guard — `--output` on files larger than 20 MB fails fast with `FILE_TOO_LARGE`; in-place writes on large files emit a warning
+- Added `file_size_human` field to `probe`, `read`, and `search` output — human-readable file size for agent timeout calibration
+- Added `INVALID_COLUMN` and `FILE_TOO_LARGE` structured error codes
+- Added pre-commit hooks — `ruff check --fix` and `ruff format` on commit, full pytest suite on push
+- Added `ruff format --check` to CI publish workflow
+- Added 37 tests across `test_write.py`, `test_search.py`, and `test_read.py`
+
 ## V0.4.0 (FEBRUARY 2026)
 
 Security hardening, untrusted-data tagging, and engine unification.
