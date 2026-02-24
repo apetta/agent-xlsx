@@ -2,6 +2,17 @@ export const metadata = { title: "Changelog" }
 
 # Changelog
 
+## V0.5.1 (FEBRUARY 2026)
+
+Bug fixes from real-world agent pipeline testing.
+
+- Fixed `--formula` with `--json` and `--from-csv` — no longer prepends `=` to all strings in batch mode. Plain text stays plain; only strings starting with `=` are written as formulas. Single-cell `--formula` behavior unchanged
+- Fixed `--columns` by header name when combined with `--range` — row-1 headers are now resolved even in range-scoped searches (both Polars and openpyxl paths)
+- Fixed `--headers` on multi-range reads — column letters are now resolved to row-1 header names with per-sheet caching, matching single-range behavior
+- Fixed `resolve_column_letters()` to prioritise header name lookup over column letter matching — prevents purely alphabetic header names (e.g. `"Formula"`) from being misinterpreted as column letters
+- Updated `--formula` description in command reference to reflect batch vs single-cell semantics
+- Added 6 regression tests for mixed formula/text writes, header name + range search, and multi-range header resolution
+
 ## V0.5.0 (FEBRUARY 2026)
 
 Search precision, write auto-create, and developer experience.
