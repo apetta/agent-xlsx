@@ -161,18 +161,16 @@ def _search_formulas(
     if columns:
         from agent_xlsx.utils.validation import resolve_column_letters
 
-        # Attempt to get row-1 headers for header-name resolution
+        # Read row-1 headers for header-name resolution (always, even with --range)
         headers = None
-        if not range_spec:
-            first_ws = wb[target_sheets[0]]
-            first_row = next(first_ws.iter_rows(min_row=1, max_row=1, values_only=True), None)
-            if first_row:
-                from agent_xlsx.utils.validation import index_to_col_letter
+        first_ws = wb[target_sheets[0]]
+        first_row = next(first_ws.iter_rows(min_row=1, max_row=1, values_only=True), None)
+        if first_row:
+            from agent_xlsx.utils.validation import index_to_col_letter
 
-                headers = [
-                    str(v) if v is not None else index_to_col_letter(i)
-                    for i, v in enumerate(first_row)
-                ]
+            headers = [
+                str(v) if v is not None else index_to_col_letter(i) for i, v in enumerate(first_row)
+            ]
         allowed_col_letters = resolve_column_letters(columns, headers)
 
     # Pre-parse range bounds for openpyxl iter_rows

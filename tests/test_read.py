@@ -101,3 +101,32 @@ def test_probe_file_size_human_present(tabular_xlsx):
     data = json.loads(result.stdout)
     assert "file_size_human" in data
     assert "size_bytes" in data  # backward compat: size_bytes still present
+
+
+# ---------------------------------------------------------------------------
+# P2 #3 — --headers on multi-range reads
+# ---------------------------------------------------------------------------
+
+
+def test_read_headers_multi_range(tabular_xlsx):
+    """--headers resolves names on multi-range reads."""
+    result = runner.invoke(app, ["read", str(tabular_xlsx), "A5:C5,A8:C8", "--headers"])
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    # Multi-range returns results array
+    for r in data["results"]:
+        assert "Product" in r["headers"]
+        assert "Revenue" in r["headers"]
+        assert "column_map" in r
+        assert r["column_map"]["A"] == "Product"
+
+
+def test_read_headers_multi_range_no_header_wins(tabular_xlsx):
+    """--headers + --no-header on multi-range: --no-header wins."""
+    result = runner.invoke(
+        app, ["read", str(tabular_xlsx), "A5:C5,A8:C8", "--headers", "--no-header"]
+    )
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    for r in data["results"]:
+        assert "column_map" not in r

@@ -273,6 +273,39 @@ def test_search_all_three(wide_xlsx):
     assert all(m["column"] == "A" for m in data["matches"])
 
 
+def test_search_columns_by_header_name_with_range(wide_xlsx):
+    """--columns by header name works when combined with --range."""
+    # "Name" is header of column A. Search within A2:D15 using header name.
+    result = runner.invoke(
+        app,
+        ["search", str(wide_xlsx), "TARGET", "--columns", "Name", "--range", "A2:D15"],
+    )
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert data["match_count"] == 1
+    assert data["matches"][0]["column"] == "A"
+
+
+def test_search_columns_header_name_with_range_in_formulas(formula_xlsx):
+    """--columns by header name + --range works with --in-formulas."""
+    result = runner.invoke(
+        app,
+        [
+            "search",
+            str(formula_xlsx),
+            "SUM",
+            "--in-formulas",
+            "--columns",
+            "Formula",
+            "--range",
+            "B1:C3",
+        ],
+    )
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert data["match_count"] == 1
+
+
 # ---------------------------------------------------------------------------
 # Backward compatibility
 # ---------------------------------------------------------------------------

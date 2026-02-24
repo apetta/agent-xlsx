@@ -196,7 +196,7 @@ agent-xlsx write <file> <cell> [value] [flags]
 | Flag | Alias | Type | Default | Description |
 |------|-------|------|---------|-------------|
 | `--sheet` | `-s` | str | first | Target sheet |
-| `--formula` | | bool | false | Treat string values as formulas (adds '=' prefix if missing). Works with single values, --json, and --from-csv |
+| `--formula` | | bool | false | Single cell: adds '=' prefix if missing. Batch (--json/--from-csv): strings starting with '=' are written as formulas, all other values written as-is |
 | `--json` | | str | | Write 2D JSON array to range |
 | `--from-csv` | | str | | Import CSV file starting at cell |
 | `--number-format` | | str | | Apply number format |

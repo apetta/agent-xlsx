@@ -24,9 +24,9 @@ def write_cmd(
     formula: bool = typer.Option(
         False,
         "--formula",
-        help="Treat string values as formulas (adds '=' prefix if missing). "
-        "Works with single values, --json, and --from-csv. "
-        "Note: strings starting with '=' are always auto-detected as formulas.",
+        help="Single cell: adds '=' prefix if missing. "
+        "Batch (--json/--from-csv): strings starting with '=' are "
+        "written as formulas, all other values written as-is.",
     ),
     json: Optional[str] = typer.Option(None, "--json", help="JSON array data for range write"),
     from_csv: Optional[str] = typer.Option(None, "--from-csv", help="CSV file to read data from"),
@@ -160,8 +160,9 @@ def _parse_cell_ref(ref: str) -> tuple[str, int]:
 def _json_to_cells(start_cell: str, json_str: str, *, formula: bool = False) -> list[dict]:
     """Convert a JSON 2D array to a list of cell write entries, starting at start_cell.
 
-    When formula=True, string values get a '=' prefix if missing. Strings
-    starting with '=' are always treated as formulas by openpyxl regardless.
+    Strings starting with '=' are auto-detected as formulas by openpyxl.
+    The formula parameter is accepted for API consistency but has no effect
+    on JSON data (values are already typed).
     """
     try:
         data = json_mod.loads(json_str)
@@ -190,9 +191,6 @@ def _json_to_cells(start_cell: str, json_str: str, *, formula: bool = False) -> 
         for col_idx, val in enumerate(row):
             col = _col_offset(start_col, col_idx)
             row_num = start_row + row_idx
-            # --formula flag: prepend '=' to strings that don't already have it
-            if formula and isinstance(val, str) and not val.startswith("="):
-                val = f"={val}"
             cells.append({"cell": f"{col}{row_num}", "value": val})
     return cells
 
@@ -200,7 +198,9 @@ def _json_to_cells(start_cell: str, json_str: str, *, formula: bool = False) -> 
 def _csv_to_cells(start_cell: str, csv_path: Path, *, formula: bool = False) -> list[dict]:
     """Read a CSV file and map rows to cell write entries starting at start_cell.
 
-    When formula=True, string values get a '=' prefix if missing.
+    When formula=True, strings starting with '=' are preserved as-is
+    (skipping numeric coercion) so openpyxl writes them as formulas.
+    All other values are coerced normally.
     """
     ref = start_cell.split(":")[0]
     start_col, start_row = _parse_cell_ref(ref)
@@ -212,8 +212,8 @@ def _csv_to_cells(start_cell: str, csv_path: Path, *, formula: bool = False) -> 
             for col_idx, val in enumerate(row):
                 col = _col_offset(start_col, col_idx)
                 row_num = start_row + row_idx
-                if formula and not val.startswith("="):
-                    val = f"={val}"
+                if formula and val.startswith("="):
+                    pass  # Preserve formula string as-is (skip numeric coercion)
                 else:
                     val = _coerce_value(val)
                 cells.append({"cell": f"{col}{row_num}", "value": val})

@@ -148,7 +148,7 @@ def test_write_json_formula_autodetect(tmp_path):
 
 
 def test_write_json_formula_flag(tmp_path):
-    """--formula flag with --json prepends '=' to strings missing it."""
+    """--formula with --json: strings starting with '=' are written as formulas."""
     out = tmp_path / "new.xlsx"
     runner.invoke(
         app,
@@ -157,7 +157,7 @@ def test_write_json_formula_flag(tmp_path):
             str(out),
             "A1",
             "--json",
-            '[["SUM(A2:A5)","AVERAGE(B2:B5)"]]',
+            '[["=SUM(A2:A5)","=AVERAGE(B2:B5)"]]',
             "--formula",
         ],
     )
@@ -193,9 +193,9 @@ def test_write_json_formula_flag_no_double_equals(tmp_path):
 
 
 def test_write_csv_formula_flag(tmp_path):
-    """--formula flag with --from-csv prepends '=' to CSV values."""
+    """--formula with --from-csv: '=' prefixed values are written as formulas."""
     csv_file = tmp_path / "formulas.csv"
-    csv_file.write_text("SUM(A1:A5)\nAVERAGE(B1:B5)\n")
+    csv_file.write_text("=SUM(A1:A5)\n=AVERAGE(B1:B5)\n")
     out = tmp_path / "new.xlsx"
     runner.invoke(
         app,
@@ -207,3 +207,50 @@ def test_write_csv_formula_flag(tmp_path):
     formulas = [c["formula"] for c in data["cells"] if c.get("formula")]
     assert "=SUM(A1:A5)" in formulas
     assert "=AVERAGE(B1:B5)" in formulas
+
+
+def test_write_json_formula_mixed_content(tmp_path):
+    """--formula with --json: plain strings are NOT converted to formulas."""
+    out = tmp_path / "new.xlsx"
+    runner.invoke(
+        app,
+        [
+            "write",
+            str(out),
+            "A1",
+            "--json",
+            '[["United Kingdom","GDP growth (%)","=AVERAGE(C2:M2)"]]',
+            "--formula",
+        ],
+    )
+    result = runner.invoke(app, ["read", str(out), "--formulas"])
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    # Plain text should NOT be formulas
+    plain_cells = [c for c in data["cells"] if c["cell"] in ("A1", "B1")]
+    for c in plain_cells:
+        assert c["formula"] is None, f"{c['cell']} should not be a formula"
+    # Formula should be preserved
+    formula_cells = [c for c in data["cells"] if c["cell"] == "C1"]
+    assert formula_cells[0]["formula"] == "=AVERAGE(C2:M2)"
+
+
+def test_write_csv_formula_mixed_content(tmp_path):
+    """--formula with --from-csv: only '=' prefixed values become formulas."""
+    csv_file = tmp_path / "mixed.csv"
+    csv_file.write_text("United Kingdom,GDP growth (%),=AVERAGE(C2:M2)\n")
+    out = tmp_path / "new.xlsx"
+    runner.invoke(
+        app,
+        ["write", str(out), "A1", "--from-csv", str(csv_file), "--formula"],
+    )
+    result = runner.invoke(app, ["read", str(out), "--formulas"])
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    # Plain text should NOT be formulas
+    plain_cells = [c for c in data["cells"] if c["cell"] in ("A1", "B1")]
+    for c in plain_cells:
+        assert c["formula"] is None, f"{c['cell']} should not be a formula"
+    # Formula should be preserved
+    formula_cells = [c for c in data["cells"] if c["cell"] == "C1"]
+    assert formula_cells[0]["formula"] == "=AVERAGE(C2:M2)"

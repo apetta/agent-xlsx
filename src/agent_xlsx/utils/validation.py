@@ -139,12 +139,18 @@ def index_to_col_letter(index: int) -> str:
     return result
 
 
-def resolve_column_filter(columns_str: str, df_columns: list[str]) -> list[str]:
+def resolve_column_filter(
+    columns_str: str,
+    df_columns: list[str],
+    headers: list[str] | None = None,
+) -> list[str]:
     """Resolve comma-separated column specs to DataFrame column names.
 
     Accepts column letters (A, B, C) or header names ("Indicator Name").
-    Returns ordered list of matching DataFrame column names.
-    Raises InvalidColumnError for unresolvable references.
+    When *headers* is provided (row-1 header names), header names are
+    resolved to their column letters before matching against df_columns.
+    This enables header-name resolution even when df_columns are letters
+    (e.g. range-scoped searches).
     """
     from agent_xlsx.utils.errors import InvalidColumnError
 
@@ -152,8 +158,11 @@ def resolve_column_filter(columns_str: str, df_columns: list[str]) -> list[str]:
     resolved: list[str] = []
     invalid: list[str] = []
 
+    # Map header names → column letters for fallback resolution
+    header_map = {h: index_to_col_letter(i) for i, h in enumerate(headers)} if headers else {}
+
     for ref in requested:
-        # Exact DataFrame column name match (header name)
+        # Exact DataFrame column name match (header name or letter)
         if ref in df_columns:
             if ref not in resolved:
                 resolved.append(ref)
@@ -169,10 +178,23 @@ def resolve_column_filter(columns_str: str, df_columns: list[str]) -> list[str]:
                     resolved.append(name)
                 continue
 
+        # Header name fallback: resolve name → column letter, check df_columns
+        if ref in header_map:
+            col_letter = header_map[ref]
+            if col_letter in df_columns and col_letter not in resolved:
+                resolved.append(col_letter)
+                continue
+
         invalid.append(ref)
 
     if invalid:
-        raise InvalidColumnError(invalid, df_columns)
+        # Include header names in error message for discoverability
+        avail = (
+            list(df_columns) + [h for h in headers if h not in df_columns]
+            if headers
+            else list(df_columns)
+        )
+        raise InvalidColumnError(invalid, avail)
 
     return resolved
 
@@ -191,14 +213,14 @@ def resolve_column_letters(columns_str: str, headers: list[str] | None = None) -
     header_map = {h: index_to_col_letter(i) for i, h in enumerate(headers)} if headers else {}
 
     for ref in requested:
-        upper_ref = ref.upper()
-        # Column letter (e.g. "A", "BC")
-        if upper_ref.isalpha():
-            letters.add(upper_ref)
-            continue
-        # Header name lookup
+        # Header name lookup first (names can be purely alphabetic like "Formula")
         if ref in header_map:
             letters.add(header_map[ref])
+            continue
+        # Column letter (e.g. "A", "BC")
+        upper_ref = ref.upper()
+        if upper_ref.isalpha():
+            letters.add(upper_ref)
             continue
         invalid.append(ref)
 

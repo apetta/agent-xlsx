@@ -131,6 +131,9 @@ def read(
 
     if is_multi:
         results = []
+        # Cache row-1 headers per sheet for --headers resolution
+        _header_cache: dict[str, list[str]] = {}
+
         for target_sheet in target_sheets:
             sheet_name = target_sheet if isinstance(target_sheet, str) else available[target_sheet]
             if ranges:
@@ -142,21 +145,43 @@ def read(
                     if sort and sort in df.columns:
                         df = df.sort(sort, descending=descending)
 
+                    # Resolve column letters to row-1 header names
+                    column_map = None
+                    if headers and not no_header and ri.get("start"):
+                        cache_key = str(target_sheet)
+                        if cache_key not in _header_cache:
+                            try:
+                                _header_cache[cache_key] = get_sheet_headers(path, target_sheet)
+                            except Exception:
+                                _header_cache[cache_key] = []
+                        sheet_headers = _header_cache[cache_key]
+                        if sheet_headers:
+                            column_map = {}
+                            for col_letter in df.columns:
+                                idx = col_letter_to_index(col_letter)
+                                if idx < len(sheet_headers):
+                                    column_map[col_letter] = sheet_headers[idx]
+                            rename_map = {
+                                letter: name for letter, name in column_map.items() if name
+                            }
+                            df = df.rename(rename_map)
+
                     rows = _df_to_serialisable_rows(df)
                     rows = _apply_date_conversion(rows, df, path, target_sheet)
 
                     range_str = (
                         f"{ri['start']}:{ri['end']}" if ri.get("end") else ri.get("start", "")
                     )
-                    results.append(
-                        {
-                            "range": range_str,
-                            "sheet": sheet_name,
-                            "headers": df.columns,
-                            "data": rows,
-                            "row_count": len(df),
-                        }
-                    )
+                    entry = {
+                        "range": range_str,
+                        "sheet": sheet_name,
+                        "headers": df.columns,
+                        "data": rows,
+                        "row_count": len(df),
+                    }
+                    if column_map:
+                        entry["column_map"] = column_map
+                    results.append(entry)
             else:
                 # No range — full sheet read per sheet
                 df = read_sheet_data(

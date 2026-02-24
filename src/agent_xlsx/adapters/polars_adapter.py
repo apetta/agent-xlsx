@@ -522,7 +522,15 @@ def search_values(
         if columns:
             from agent_xlsx.utils.validation import resolve_column_filter
 
-            search_cols = resolve_column_filter(columns, list(df.columns))
+            # When range is active, columns are letters — load row-1 headers
+            # so header names can be resolved to those letters
+            col_headers = None
+            if range_spec:
+                try:
+                    col_headers = get_sheet_headers(fpath, name)
+                except Exception:
+                    pass
+            search_cols = resolve_column_filter(columns, list(df.columns), headers=col_headers)
         else:
             search_cols = list(df.columns)
 
