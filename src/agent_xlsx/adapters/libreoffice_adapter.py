@@ -143,8 +143,14 @@ def _prepare_sheet_for_export(
     ws.sheet_properties.pageSetUpPr.fitToPage = True
 
     # Suppress headers/footers (page numbers prevent autocrop from trimming whitespace)
-    for attr in ("oddHeader", "evenHeader", "firstHeader",
-                 "oddFooter", "evenFooter", "firstFooter"):
+    for attr in (
+        "oddHeader",
+        "evenHeader",
+        "firstHeader",
+        "oddFooter",
+        "evenFooter",
+        "firstFooter",
+    ):
         hf = getattr(ws, attr, None)
         if hf:
             hf.left.text = ""

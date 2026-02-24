@@ -23,7 +23,12 @@ from agent_xlsx.utils.dates import (
     excel_serial_to_isodate,
 )
 from agent_xlsx.utils.errors import SheetNotFoundError
-from agent_xlsx.utils.validation import file_size_bytes, index_to_col_letter
+from agent_xlsx.utils.validation import (
+    col_letter_to_index,
+    file_size_bytes,
+    file_size_human,
+    index_to_col_letter,
+)
 
 
 def get_sheet_names(filepath: str | Path) -> list[str]:
@@ -43,6 +48,15 @@ def get_sheet_dimensions(filepath: str | Path, sheet_name: str | int = 0) -> dic
         "headers": [c.name for c in sheet.available_columns()],
         "visible": sheet.visible == "visible",
     }
+
+
+def get_sheet_headers(filepath: str | Path, sheet_name: str | int = 0) -> list[str]:
+    """Return row-1 header names for a sheet (zero data parsing)."""
+    fpath = str(filepath)
+    resolved = _resolve_sheet_name(fpath, sheet_name)
+    reader = fastexcel.read_excel(fpath)
+    sheet = reader.load_sheet(resolved, n_rows=0)
+    return [c.name for c in sheet.available_columns()]
 
 
 def read_sheet_data(
@@ -372,6 +386,7 @@ def probe_workbook(
     result: dict[str, Any] = {
         "file": Path(filepath).name,
         "size_bytes": file_size_bytes(fpath),
+        "file_size_human": file_size_human(fpath),
         "format": Path(filepath).suffix.lstrip(".").lower(),
         "probe_time_ms": elapsed_ms,
         "sheets": sheets_result,
@@ -412,12 +427,20 @@ def search_values(
     regex: bool = False,
     ignore_case: bool = False,
     no_header: bool = False,
+    columns: str | None = None,
+    limit: int = MAX_SEARCH_RESULTS,
+    range_spec: dict | None = None,
 ) -> list[dict[str, Any]]:
     """Search for values across sheets using Polars string matching.
 
     Returns list of match dicts: {sheet, column, row, cell, value}.
     When *no_header* is True, columns are named with Excel letters and
     cell references use simple 1-based row numbering (no header offset).
+
+    Optional filters:
+    - columns: comma-separated column letters or header names to restrict search
+    - limit: max results to return (default: MAX_SEARCH_RESULTS)
+    - range_spec: parsed range dict {sheet, start, end} to restrict row/col scope
     """
     fpath = str(filepath)
     reader = fastexcel.read_excel(fpath)
@@ -432,6 +455,32 @@ def search_values(
 
     matches: list[dict[str, Any]] = []
 
+    # Pre-parse range bounds if provided
+    range_row_offset = None
+    r_start_col_idx = None
+    r_start_row = None
+    r_end_row = None
+    r_use_cols = None
+    if range_spec:
+        import re as _re
+
+        start_str = range_spec["start"]
+        m = _re.match(r"^([A-Z]+)(\d+)$", start_str.upper())
+        if m:
+            r_start_col_idx = col_letter_to_index(m.group(1))
+            r_start_row = int(m.group(2))
+        if range_spec.get("end"):
+            end_str = range_spec["end"]
+            m2 = _re.match(r"^([A-Z]+)(\d+)$", end_str.upper())
+            if m2:
+                r_end_col_idx = col_letter_to_index(m2.group(1))
+                r_end_row = int(m2.group(2))
+                r_use_cols = list(range(r_start_col_idx, r_end_col_idx + 1))
+        else:
+            # Single cell range
+            r_end_row = r_start_row
+            r_use_cols = [r_start_col_idx] if r_start_col_idx is not None else None
+
     # Best-effort date column detection — single workbook open for all sheets
     try:
         all_date_cols = detect_date_column_indices_batch(fpath, target_sheets)
@@ -440,7 +489,22 @@ def search_values(
 
     for name in target_sheets:
         with _suppress_stderr():
-            if no_header:
+            if range_spec and r_start_row is not None and r_end_row is not None:
+                # Range-scoped load: only the rows/cols within the range
+                sheet = reader.load_sheet(
+                    name,
+                    header_row=None,
+                    skip_rows=r_start_row - 1,
+                    n_rows=r_end_row - r_start_row + 1,
+                    **({"use_columns": r_use_cols} if r_use_cols else {}),
+                )
+                df = pl.DataFrame(sheet)
+                # Rename columns to Excel letters matching range positions
+                base_col = r_start_col_idx or 0
+                col_letters = [index_to_col_letter(base_col + i) for i in range(len(df.columns))]
+                df = df.rename(dict(zip(df.columns, col_letters[: len(df.columns)])))
+                range_row_offset = r_start_row
+            elif no_header:
                 sheet = reader.load_sheet(name, header_row=None)
                 df = pl.DataFrame(sheet)
                 col_letters = [index_to_col_letter(i) for i in range(len(df.columns))]
@@ -454,7 +518,15 @@ def search_values(
 
         date_col_indices = all_date_cols.get(name, set())
 
-        for col in df.columns:
+        # Apply column filter if specified
+        if columns:
+            from agent_xlsx.utils.validation import resolve_column_filter
+
+            search_cols = resolve_column_filter(columns, list(df.columns))
+        else:
+            search_cols = list(df.columns)
+
+        for col in search_cols:
             # Cast column to string for searching
             str_col = df[col].cast(pl.Utf8, strict=False)
 
@@ -478,17 +550,25 @@ def search_values(
                     cell_value = cell_value.item()
 
                 col_idx = df.columns.index(col)
-                col_letter = index_to_col_letter(col_idx)
+                # For range-scoped search, column letter comes from the DataFrame
+                # (already renamed to correct Excel letters). For normal search,
+                # compute from the DataFrame position.
+                if range_spec and r_start_col_idx is not None:
+                    col_letter = index_to_col_letter(r_start_col_idx + col_idx)
+                    abs_col_idx = r_start_col_idx + col_idx
+                else:
+                    col_letter = index_to_col_letter(col_idx)
+                    abs_col_idx = col_idx
 
                 # Convert date serial numbers to ISO strings
                 # --no-header makes all columns String; coerce numeric strings
-                if col_idx in date_col_indices and isinstance(cell_value, str):
+                if abs_col_idx in date_col_indices and isinstance(cell_value, str):
                     try:
                         cell_value = float(cell_value)
                     except (ValueError, TypeError):
                         pass
                 if (
-                    col_idx in date_col_indices
+                    abs_col_idx in date_col_indices
                     and isinstance(cell_value, (int, float))
                     and cell_value == cell_value  # not NaN
                     and cell_value > 0
@@ -496,9 +576,14 @@ def search_values(
                     converted = excel_serial_to_isodate(float(cell_value))
                     if converted is not None:
                         cell_value = converted
-                # no_header: row 1 is data, so Excel row = row_idx + 1
-                # with header: row 1 consumed as header, so Excel row = row_idx + 2
-                excel_row = row_idx + 1 if no_header else row_idx + 2
+
+                # Compute Excel row number
+                if range_row_offset is not None:
+                    excel_row = range_row_offset + row_idx
+                elif no_header:
+                    excel_row = row_idx + 1
+                else:
+                    excel_row = row_idx + 2
                 cell_ref = f"{col_letter}{excel_row}"
 
                 matches.append(
@@ -511,7 +596,7 @@ def search_values(
                     }
                 )
 
-                if len(matches) >= MAX_SEARCH_RESULTS:
+                if len(matches) >= limit:
                     return matches
 
     return matches

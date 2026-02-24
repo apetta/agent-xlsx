@@ -6,8 +6,13 @@ import os
 import re
 from pathlib import Path
 
-from agent_xlsx.utils.constants import EXCEL_EXTENSIONS
-from agent_xlsx.utils.errors import ExcelFileNotFoundError, InvalidFormatError, RangeInvalidError
+from agent_xlsx.utils.constants import EXCEL_EXTENSIONS, WRITABLE_EXTENSIONS
+from agent_xlsx.utils.errors import (
+    AgentExcelError,
+    ExcelFileNotFoundError,
+    InvalidFormatError,
+    RangeInvalidError,
+)
 
 
 def validate_file(filepath: str) -> Path:
@@ -20,9 +25,42 @@ def validate_file(filepath: str) -> Path:
     return p
 
 
+def validate_file_for_write(filepath: str) -> tuple[Path, bool]:
+    """Validate a file path for write operations.
+
+    Unlike validate_file(), allows non-existent files — they will be auto-created.
+    Returns (resolved_path, is_new_file).
+    """
+    p = Path(filepath).resolve()
+    if p.exists():
+        if p.suffix.lower() not in EXCEL_EXTENSIONS:
+            raise InvalidFormatError(filepath)
+        return p, False
+    # New file — must be a writable extension
+    if p.suffix.lower() not in WRITABLE_EXTENSIONS:
+        raise AgentExcelError(
+            "INVALID_FORMAT",
+            f"Cannot create '{filepath}' — only .xlsx and .xlsm files can be created",
+            [f"Writable formats: {', '.join(sorted(WRITABLE_EXTENSIONS))}"],
+        )
+    return p, True
+
+
 def file_size_bytes(filepath: str | Path) -> int:
     """Return file size in bytes."""
     return os.path.getsize(filepath)
+
+
+def file_size_human(filepath: str | Path) -> str:
+    """Return file size as a human-readable string (e.g. '107.7 KB', '76.2 MB')."""
+    size = file_size_bytes(filepath)
+    if size < 1024:
+        return f"{size} B"
+    elif size < 1024 * 1024:
+        return f"{size / 1024:.1f} KB"
+    elif size < 1024 * 1024 * 1024:
+        return f"{size / (1024 * 1024):.1f} MB"
+    return f"{size / (1024 * 1024 * 1024):.1f} GB"
 
 
 # Pattern: optional "SheetName!" prefix, then cell range like A1:C10 or just A1
@@ -99,3 +137,73 @@ def index_to_col_letter(index: int) -> str:
         idx, remainder = divmod(idx - 1, 26)
         result = chr(65 + remainder) + result
     return result
+
+
+def resolve_column_filter(columns_str: str, df_columns: list[str]) -> list[str]:
+    """Resolve comma-separated column specs to DataFrame column names.
+
+    Accepts column letters (A, B, C) or header names ("Indicator Name").
+    Returns ordered list of matching DataFrame column names.
+    Raises InvalidColumnError for unresolvable references.
+    """
+    from agent_xlsx.utils.errors import InvalidColumnError
+
+    requested = [c.strip() for c in columns_str.split(",") if c.strip()]
+    resolved: list[str] = []
+    invalid: list[str] = []
+
+    for ref in requested:
+        # Exact DataFrame column name match (header name)
+        if ref in df_columns:
+            if ref not in resolved:
+                resolved.append(ref)
+            continue
+
+        # Column letter match (e.g. "A", "BC", case-insensitive)
+        upper_ref = ref.upper()
+        if upper_ref.isalpha():
+            idx = col_letter_to_index(upper_ref)
+            if 0 <= idx < len(df_columns):
+                name = df_columns[idx]
+                if name not in resolved:
+                    resolved.append(name)
+                continue
+
+        invalid.append(ref)
+
+    if invalid:
+        raise InvalidColumnError(invalid, df_columns)
+
+    return resolved
+
+
+def resolve_column_letters(columns_str: str, headers: list[str] | None = None) -> set[str]:
+    """Resolve column specs to uppercase column letters for openpyxl filtering.
+
+    Accepts column letters (A, B, C) or header names (when headers provided).
+    Returns a set of uppercase column letters.
+    """
+    from agent_xlsx.utils.errors import InvalidColumnError
+
+    requested = [c.strip() for c in columns_str.split(",") if c.strip()]
+    letters: set[str] = set()
+    invalid: list[str] = []
+    header_map = {h: index_to_col_letter(i) for i, h in enumerate(headers)} if headers else {}
+
+    for ref in requested:
+        upper_ref = ref.upper()
+        # Column letter (e.g. "A", "BC")
+        if upper_ref.isalpha():
+            letters.add(upper_ref)
+            continue
+        # Header name lookup
+        if ref in header_map:
+            letters.add(header_map[ref])
+            continue
+        invalid.append(ref)
+
+    if invalid:
+        available = list(header_map.keys()) if headers else ["(column letters only)"]
+        raise InvalidColumnError(invalid, available)
+
+    return letters

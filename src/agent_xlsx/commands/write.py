@@ -10,16 +10,24 @@ import typer
 from agent_xlsx.cli import app
 from agent_xlsx.formatters import json_formatter
 from agent_xlsx.utils.errors import AgentExcelError, handle_error
-from agent_xlsx.utils.validation import _normalise_shell_ref, validate_file
+from agent_xlsx.utils.validation import _normalise_shell_ref, validate_file_for_write
 
 
 @app.command("write")
 @handle_error
 def write_cmd(
     file: str = typer.Argument(..., help="Path to the Excel file"),
-    cell: str = typer.Argument(..., help="Cell reference (e.g. 'A1', '2022!A1', or 'Sheet1!A1:C3')"),  # noqa: E501
+    cell: str = typer.Argument(
+        ..., help="Cell reference (e.g. 'A1', '2022!A1', or 'Sheet1!A1:C3')"
+    ),  # noqa: E501
     value: Optional[str] = typer.Argument(None, help="Value to write (for single cell)"),
-    formula: bool = typer.Option(False, "--formula", help="Treat value as a formula"),
+    formula: bool = typer.Option(
+        False,
+        "--formula",
+        help="Treat string values as formulas (adds '=' prefix if missing). "
+        "Works with single values, --json, and --from-csv. "
+        "Note: strings starting with '=' are always auto-detected as formulas.",
+    ),
     json: Optional[str] = typer.Option(None, "--json", help="JSON array data for range write"),
     from_csv: Optional[str] = typer.Option(None, "--from-csv", help="CSV file to read data from"),
     number_format: Optional[str] = typer.Option(
@@ -36,7 +44,7 @@ def write_cmd(
     sheet: Optional[str] = typer.Option(None, "--sheet", "-s", help="Target sheet name"),
 ) -> None:
     """Write values or formulas to specific cells or ranges."""
-    path = validate_file(file)
+    path, _is_new = validate_file_for_write(file)
 
     # Parse Sheet!Cell syntax (e.g. "2022!B1" → sheet=2022, cell=B1)
     cell = _normalise_shell_ref(cell)
@@ -53,7 +61,7 @@ def write_cmd(
 
     if json:
         # Parse JSON array and map to cells starting at the given cell ref
-        write_data = _json_to_cells(cell, json)
+        write_data = _json_to_cells(cell, json, formula=formula)
     elif from_csv:
         # Read CSV file and map rows to cells
         csv_path = Path(from_csv)
@@ -63,7 +71,7 @@ def write_cmd(
                 f"CSV file '{from_csv}' does not exist",
                 ["Check the CSV file path"],
             )
-        write_data = _csv_to_cells(cell, csv_path)
+        write_data = _csv_to_cells(cell, csv_path, formula=formula)
     elif value is not None:
         # Single cell write
         cell_value = value
@@ -149,8 +157,12 @@ def _parse_cell_ref(ref: str) -> tuple[str, int]:
     return m.group(1), int(m.group(2))
 
 
-def _json_to_cells(start_cell: str, json_str: str) -> list[dict]:
-    """Convert a JSON 2D array to a list of cell write entries, starting at start_cell."""
+def _json_to_cells(start_cell: str, json_str: str, *, formula: bool = False) -> list[dict]:
+    """Convert a JSON 2D array to a list of cell write entries, starting at start_cell.
+
+    When formula=True, string values get a '=' prefix if missing. Strings
+    starting with '=' are always treated as formulas by openpyxl regardless.
+    """
     try:
         data = json_mod.loads(json_str)
     except json_mod.JSONDecodeError as exc:
@@ -178,12 +190,18 @@ def _json_to_cells(start_cell: str, json_str: str) -> list[dict]:
         for col_idx, val in enumerate(row):
             col = _col_offset(start_col, col_idx)
             row_num = start_row + row_idx
+            # --formula flag: prepend '=' to strings that don't already have it
+            if formula and isinstance(val, str) and not val.startswith("="):
+                val = f"={val}"
             cells.append({"cell": f"{col}{row_num}", "value": val})
     return cells
 
 
-def _csv_to_cells(start_cell: str, csv_path: Path) -> list[dict]:
-    """Read a CSV file and map rows to cell write entries starting at start_cell."""
+def _csv_to_cells(start_cell: str, csv_path: Path, *, formula: bool = False) -> list[dict]:
+    """Read a CSV file and map rows to cell write entries starting at start_cell.
+
+    When formula=True, string values get a '=' prefix if missing.
+    """
     ref = start_cell.split(":")[0]
     start_col, start_row = _parse_cell_ref(ref)
 
@@ -194,5 +212,9 @@ def _csv_to_cells(start_cell: str, csv_path: Path) -> list[dict]:
             for col_idx, val in enumerate(row):
                 col = _col_offset(start_col, col_idx)
                 row_num = start_row + row_idx
-                cells.append({"cell": f"{col}{row_num}", "value": _coerce_value(val)})
+                if formula and not val.startswith("="):
+                    val = f"={val}"
+                else:
+                    val = _coerce_value(val)
+                cells.append({"cell": f"{col}{row_num}", "value": val})
     return cells

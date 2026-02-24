@@ -52,9 +52,11 @@ def _apply_license() -> bool:
     # The env var is visible in ps aux even when ASPOSE_LICENSE_PATH takes precedence.
     # Goes to stderr to keep stdout clean. Fires once per process.
     import os as _os
+
     if _os.environ.get("ASPOSE_LICENSE_DATA") and not _LICENSE_DATA_WARNED:
         _LICENSE_DATA_WARNED = True
         import sys as _sys
+
         _sys.stderr.write(
             "[agent-xlsx] Warning: ASPOSE_LICENSE_DATA is present in the environment "
             "and visible in process listings (ps aux). "

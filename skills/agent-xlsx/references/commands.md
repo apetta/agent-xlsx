@@ -66,6 +66,7 @@ agent-xlsx read <file> [range] [flags]
 | `--formulas` | | bool | false | Return formula strings (openpyxl fallback) |
 | `--format` | `-f` | str | json | Output format: json, csv |
 | `--no-header` | | bool | false | Treat row 1 as data, columns as Excel letters |
+| `--headers` | | bool | false | Resolve column letters to row-1 header names in range reads. Adds `column_map` to output |
 | `--compact/--no-compact` | | bool | **true** | Drop fully-null columns from output (strips separator columns). Use `--no-compact` to preserve all columns |
 | `--all-sheets` | | bool | false | Read the same range(s) from every sheet |
 
@@ -94,10 +95,13 @@ agent-xlsx search <file> <query> [flags]
 | `--sheet` | `-s` | str | all | Target specific sheet |
 | `--regex` | `-r` | bool | false | Treat query as regex |
 | `--ignore-case` | `-i` | bool | false | Case-insensitive match |
+| `--columns` | `-c` | str | all | Columns to search: letters (A,B,C) or header names (comma-separated) |
+| `--limit` | `-l` | int | 25 | Max results to return (max: 1000) |
+| `--range` | | str | | Restrict search to range (e.g. 'A1:D100' or 'Sheet!A1:D100') |
 | `--in-formulas` | | bool | false | Search formula strings (openpyxl fallback) |
 | `--no-header` | | bool | false | Treat row 1 as data, columns as Excel letters |
 
-**Output:** `matches[].{sheet, column, cell, value, row}` — `column` is always an Excel letter (A, B, H, etc.). Max 25 results. Check `truncated` field. With `--in-formulas`: `matches[].{sheet, cell, formula}` (no `column`, `row`, or `value`).
+**Output:** `matches[].{sheet, column, cell, value, row}` — `column` is always an Excel letter (A, B, H, etc.). Default 25 results (use `--limit` to adjust). Check `truncated` field. With `--in-formulas`: `matches[].{sheet, cell, formula}` (no `column`, `row`, or `value`). `--columns`, `--limit`, and `--range` compose naturally.
 
 ---
 
@@ -192,13 +196,13 @@ agent-xlsx write <file> <cell> [value] [flags]
 | Flag | Alias | Type | Default | Description |
 |------|-------|------|---------|-------------|
 | `--sheet` | `-s` | str | first | Target sheet |
-| `--formula` | | bool | false | Treat value as formula |
+| `--formula` | | bool | false | Treat string values as formulas (adds '=' prefix if missing). Works with single values, --json, and --from-csv |
 | `--json` | | str | | Write 2D JSON array to range |
 | `--from-csv` | | str | | Import CSV file starting at cell |
 | `--number-format` | | str | | Apply number format |
 | `--output` | `-o` | str | in-place | Save to new file |
 
-VBA macros in .xlsm files are automatically preserved.
+Auto-creates the target file if it doesn't exist (`.xlsx` and `.xlsm` only). VBA macros in .xlsm files are automatically preserved. Emits `"created": true` when a new file is bootstrapped.
 
 ---
 

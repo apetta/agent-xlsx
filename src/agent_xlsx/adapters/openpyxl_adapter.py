@@ -23,7 +23,9 @@ from agent_xlsx.utils.constants import (
     MAX_FORMULA_CELLS,
     MAX_LOCATIONS,
     WRITABLE_EXTENSIONS,
+    WRITE_SIZE_WARN_BYTES,
 )
+from agent_xlsx.utils.validation import file_size_bytes
 
 # ---------------------------------------------------------------------------
 # Workbook-level metadata
@@ -575,6 +577,18 @@ def get_hyperlinks(filepath: str | Path, sheet_name: str) -> list[dict[str, Any]
 # ---------------------------------------------------------------------------
 
 
+def _create_blank_workbook(filepath: Path, sheet_name: str | None = None) -> None:
+    """Create a new blank workbook. Renames the default sheet if sheet_name provided."""
+    from openpyxl import Workbook
+
+    filepath.parent.mkdir(parents=True, exist_ok=True)
+    wb = Workbook()
+    if sheet_name:
+        wb.active.title = sheet_name
+    wb.save(str(filepath))
+    wb.close()
+
+
 def write_cells(
     filepath: str | Path,
     sheet_name: str | None,
@@ -586,9 +600,47 @@ def write_cells(
     Each item in `data` should have: cell (str), value (any), and optionally
     number_format (str).
 
+    Auto-creates a new workbook when the target file doesn't exist.
     Preserves existing workbook content. For .xlsm files, VBA is preserved.
     """
+    from agent_xlsx.utils.errors import AgentExcelError
+
     filepath = Path(filepath)
+    created = False
+    warning = None
+
+    # Auto-create: if file doesn't exist, bootstrap a blank workbook
+    if not filepath.exists():
+        if output_path:
+            # --output with non-existent source: create the output file directly
+            target = Path(output_path)
+            if target.suffix.lower() not in WRITABLE_EXTENSIONS:
+                target = target.with_suffix(".xlsx")
+            _create_blank_workbook(target, sheet_name=sheet_name)
+            filepath = target
+            output_path = None  # Already writing to output, no save-as needed
+        else:
+            _create_blank_workbook(filepath, sheet_name=sheet_name)
+        created = True
+
+    # Size guard: large files can hang or OOM when loaded for write
+    if not created:
+        size = file_size_bytes(filepath)
+        size_mb = size / (1024 * 1024)
+        if size > WRITE_SIZE_WARN_BYTES:
+            if output_path:
+                raise AgentExcelError(
+                    "FILE_TOO_LARGE",
+                    f"Source file is {size_mb:.0f}MB — too large to copy via --output",
+                    [
+                        "Create a new file directly instead of copying from a large source:",
+                        f"  agent-xlsx write {output_path} A1 --json '<data>'",
+                        "Or extract needed data with 'read' first, then write to a new file",
+                    ],
+                )
+            else:
+                warning = f"File is {size_mb:.0f}MB — write may be slow"
+
     keep_vba = filepath.suffix.lower() == ".xlsm"
     wb = load_workbook(str(filepath), keep_vba=keep_vba)
     try:
@@ -609,11 +661,16 @@ def write_cells(
             save_path = save_path.with_suffix(".xlsx")
         wb.save(str(save_path))
 
-        return {
+        result: dict[str, Any] = {
             "status": "success",
             "cells_written": cells_written,
             "output_file": str(save_path),
         }
+        if created:
+            result["created"] = True
+        if warning:
+            result["warning"] = warning
+        return result
     finally:
         wb.close()
 

@@ -25,7 +25,7 @@ LLM agents working with Excel files face a fundamental problem: existing librari
 
 1. **Progressive Disclosure** — `probe` (structure) &rarr; `screenshot` (visual) &rarr; `read` (data) &rarr; `inspect` (metadata). Each layer adds detail only when needed. No wasted tokens.
 
-2. **Speed First** — The primary data backend is Polars + fastexcel (Rust/Calamine), delivering 7-10x faster reads than openpyxl with zero-copy Arrow integration. A full workbook profile completes in under 50ms.
+2. **Speed First** — The primary data backend is Polars + fastexcel (Rust/Calamine), delivering 7-10x faster reads than openpyxl with zero-copy Arrow integration.
 
 3. **Token Efficiency** — Every output is optimised for minimal token consumption. Aggregation over enumeration. Capped lists with counts. An agent builds comprehensive understanding of a workbook in 1-2 round-trips, not 10.
 
@@ -106,7 +106,7 @@ All other commands (probe, read, search, export, write, format, inspect, overvie
 
 The recommended agent workflow is **probe first, then drill down**:
 
-1. **Profile** the workbook — lean skeleton in <10ms:
+1. **Profile** the workbook — lean skeleton:
 ```bash
 agent-xlsx probe workbook.xlsx
 ```
@@ -137,7 +137,7 @@ agent-xlsx inspect workbook.xlsx --sheet Sales
 
 ### `probe` — Ultra-Fast Workbook Profiling
 
-The **first command an agent should run**. Lean by default — returns sheet names, dimensions, and headers with zero data parsing (<10ms). Use flags to opt into richer detail.
+The **first command an agent should run**. Lean by default — returns sheet names, dimensions, and headers with zero data parsing. Use flags to opt into richer detail.
 
 ```bash
 agent-xlsx probe data.xlsx
@@ -507,9 +507,9 @@ Polars+fastexcel   openpyxl   Aspose.Cells   xlwings      LibreOffice
 |---------|------|-------|---------|
 | **Polars + fastexcel** | Primary data engine | 7-10x faster than openpyxl | `probe`, `read`, `search`, `export` |
 | **openpyxl** | Metadata + writes | Baseline | `overview`, `inspect`, `write`, `format`, `sheet` |
-| **Aspose.Cells** ([separately licensed](https://company.aspose.com/legal/eula)) | Cross-platform rendering (default) | ~1-3s per sheet | `screenshot`, `recalc`, `objects` |
-| **xlwings** (Excel) | Highest-fidelity rendering | ~2s per sheet | `screenshot`, `recalc`, `objects`, `vba --run` |
-| **LibreOffice + PyMuPDF** | Free rendering fallback | ~3s per sheet | `screenshot`, `recalc` |
+| **Aspose.Cells** ([separately licensed](https://company.aspose.com/legal/eula)) | Cross-platform rendering (default) | Fast (rendering) | `screenshot`, `recalc`, `objects` |
+| **xlwings** (Excel) | Highest-fidelity rendering | Fast (rendering) | `screenshot`, `recalc`, `objects`, `vba --run` |
+| **LibreOffice + PyMuPDF** | Free rendering fallback | Moderate (rendering) | `screenshot`, `recalc` |
 | **oletools** | VBA extraction | Fast | `vba` |
 
 ### Why not just openpyxl?
@@ -581,21 +581,21 @@ Error codes include: `FILE_NOT_FOUND`, `INVALID_FORMAT`, `SHEET_NOT_FOUND`, `INV
 
 ## Performance
 
-Benchmarked on a 255-row, 34-column, 6-sheet workbook:
+agent-xlsx uses a tiered backend strategy that matches the fastest engine to each task:
 
-| Operation | Time | Backend |
-|-----------|------|---------|
-| `probe` (default, lean) | ~8ms | Polars + fastexcel |
-| `probe --full` (types + sample + stats) | ~20ms | Polars + fastexcel |
-| `read` (range) | ~9ms | Polars + fastexcel |
-| `search` (cross-workbook) | ~19ms | Polars + fastexcel |
-| `overview` | ~157ms | openpyxl |
-| `inspect` | ~120ms | openpyxl |
-| `recalc --check-only` | ~184ms | openpyxl |
-| `screenshot` (PNG, per-sheet) | ~3s + ~0.1s/page | LibreOffice + PyMuPDF |
-| `recalc` (full) | ~2.5s | LibreOffice |
+| Operation | Speed | Backend |
+|-----------|-------|---------|
+| `probe` (default, lean) | Fastest | Polars + fastexcel |
+| `probe --full` (types + sample + stats) | Fast | Polars + fastexcel |
+| `read` (range) | Fastest | Polars + fastexcel |
+| `search` (cross-workbook) | Fast | Polars + fastexcel |
+| `overview` | Moderate | openpyxl |
+| `inspect` | Moderate | openpyxl |
+| `recalc --check-only` | Moderate | openpyxl |
+| `screenshot` (PNG, per-sheet) | Slower (rendering) | LibreOffice + PyMuPDF |
+| `recalc` (full) | Slower (rendering) | LibreOffice |
 
-The Polars + fastexcel backend maintains sub-50ms response times even on workbooks with 100K+ rows.
+The Polars + fastexcel backend is 7-10x faster than openpyxl for equivalent operations. Performance scales linearly with file size. Every command output includes `file_size_human` so agents can calibrate timeout expectations accordingly.
 
 ---
 

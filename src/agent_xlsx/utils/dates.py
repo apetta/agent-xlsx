@@ -87,9 +87,7 @@ def excel_serial_to_isodate(serial: float) -> str | None:
     return dt.strftime("%Y-%m-%d")
 
 
-def detect_date_column_indices(
-    filepath: str | Path, sheet_name: str | None = None
-) -> set[int]:
+def detect_date_column_indices(filepath: str | Path, sheet_name: str | None = None) -> set[int]:
     """Detect columns with date number formats. Returns 0-based column indices.
 
     Unlike :func:`detect_date_columns` which returns header names, this

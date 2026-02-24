@@ -41,7 +41,8 @@ def probe(
 ) -> None:
     """Ultra-fast workbook profiling — lean by default.
 
-    Returns sheet names, dimensions, and headers with zero data parsing (<10ms).
+    Returns sheet names, dimensions, and headers with zero data parsing.
+    Speed scales with file size; check file_size_human in the output.
     Use --types, --sample, --stats, or --full to opt into richer detail.
     """
     path = validate_file(file)

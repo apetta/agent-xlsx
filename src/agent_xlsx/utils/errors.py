@@ -127,6 +127,17 @@ class InvalidRegexError(AgentExcelError):
         )
 
 
+class InvalidColumnError(AgentExcelError):
+    def __init__(self, invalid_refs: list[str], available: list[str]):
+        avail_str = ", ".join(str(c) for c in available[:20])
+        suffix = f" (first 20 of {len(available)})" if len(available) > 20 else ""
+        super().__init__(
+            "INVALID_COLUMN",
+            f"Column(s) not found: {', '.join(invalid_refs)}",
+            [f"Available: {avail_str}{suffix}"],
+        )
+
+
 class MemoryExceededError(AgentExcelError):
     def __init__(self, used_mb: float, limit_mb: float):
         super().__init__(

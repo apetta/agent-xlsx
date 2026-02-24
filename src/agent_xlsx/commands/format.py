@@ -16,7 +16,9 @@ from agent_xlsx.utils.validation import _normalise_shell_ref, validate_file
 @handle_error
 def format_cmd(
     file: str = typer.Argument(..., help="Path to the Excel file"),
-    cell: str = typer.Argument(..., help="Cell or range reference (e.g. 'A1', '2022!A1', or 'Sheet1!A1:D10')"),  # noqa: E501
+    cell: str = typer.Argument(
+        ..., help="Cell or range reference (e.g. 'A1', '2022!A1', or 'Sheet1!A1:D10')"
+    ),  # noqa: E501
     read: bool = typer.Option(False, "--read", help="Read formatting at the cell"),
     font: Optional[str] = typer.Option(
         None,

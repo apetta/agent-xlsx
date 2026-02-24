@@ -76,9 +76,7 @@ def test_export_json_stdout_has_data_origin(sample_xlsx):
 
 def test_export_csv_json_envelope_has_data_origin(sample_xlsx):
     """export --format csv --json-envelope must return tagged JSON with data field."""
-    result = runner.invoke(
-        app, ["export", str(sample_xlsx), "--format", "csv", "--json-envelope"]
-    )
+    result = runner.invoke(app, ["export", str(sample_xlsx), "--format", "csv", "--json-envelope"])
     assert result.exit_code == 0, result.stdout
     data = _assert_tagged(result.stdout)
     assert data["format"] == "csv"
@@ -235,9 +233,7 @@ def test_vba_run_allow_risky_bypasses_macro_blocked(sample_xlsm, monkeypatch):
         "agent_xlsx.adapters.xlwings_adapter.run_macro",
         lambda filepath, macro_name, args, save: {"status": "success", "result": None},
     )
-    result = runner.invoke(
-        app, ["vba", str(sample_xlsm), "--run", "Module1.Test", "--allow-risky"]
-    )
+    result = runner.invoke(app, ["vba", str(sample_xlsm), "--run", "Module1.Test", "--allow-risky"])
     data = json.loads(result.stdout)
     assert data.get("code") != "MACRO_BLOCKED"
     assert data.get("error") is not True

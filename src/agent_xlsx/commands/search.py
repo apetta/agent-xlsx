@@ -9,9 +9,9 @@ import typer
 from agent_xlsx.adapters.polars_adapter import search_values
 from agent_xlsx.cli import app
 from agent_xlsx.formatters.json_formatter import output_spreadsheet_data
-from agent_xlsx.utils.constants import MAX_SEARCH_RESULTS
+from agent_xlsx.utils.constants import MAX_SEARCH_LIMIT, MAX_SEARCH_RESULTS
 from agent_xlsx.utils.errors import InvalidRegexError, SheetNotFoundError, handle_error
-from agent_xlsx.utils.validation import validate_file
+from agent_xlsx.utils.validation import file_size_human, parse_range, validate_file
 
 
 @app.command()
@@ -22,6 +22,23 @@ def search(
     regex: bool = typer.Option(False, "--regex", "-r", help="Treat query as regex pattern"),
     ignore_case: bool = typer.Option(False, "--ignore-case", "-i", help="Case-insensitive search"),
     sheet: Optional[str] = typer.Option(None, "--sheet", "-s", help="Search in specific sheet"),
+    columns: Optional[str] = typer.Option(
+        None,
+        "--columns",
+        "-c",
+        help="Columns to search: letters (A,B,C) or header names (comma-separated)",
+    ),
+    limit: int = typer.Option(
+        MAX_SEARCH_RESULTS,
+        "--limit",
+        "-l",
+        help=f"Max results to return (default: {MAX_SEARCH_RESULTS}, max: {MAX_SEARCH_LIMIT})",
+    ),
+    range_: Optional[str] = typer.Option(
+        None,
+        "--range",
+        help="Restrict search to range (e.g. 'A1:D100' or 'Sheet!A1:D100')",
+    ),
     in_formulas: bool = typer.Option(
         False, "--in-formulas", help="Search in formula strings (uses openpyxl, slower)"
     ),
@@ -35,9 +52,21 @@ def search(
     """Search for values across the workbook.
 
     Uses Polars for fast value searching by default.
+    Speed scales with file size; check file_size_human in the output.
     Use --in-formulas to search formula strings via openpyxl.
     """
     path = validate_file(file)
+
+    # Cap limit to safety ceiling
+    effective_limit = min(limit, MAX_SEARCH_LIMIT)
+
+    # Parse range if provided
+    range_spec = None
+    if range_:
+        range_spec = parse_range(range_)
+        # If range includes a sheet name, it overrides --sheet
+        if range_spec["sheet"]:
+            sheet = range_spec["sheet"]
 
     if regex:
         import re
@@ -50,7 +79,16 @@ def search(
     start = time.perf_counter()
 
     if in_formulas:
-        matches = _search_formulas(path, query, sheet, regex, ignore_case)
+        matches = _search_formulas(
+            path,
+            query,
+            sheet,
+            regex,
+            ignore_case,
+            columns=columns,
+            limit=effective_limit,
+            range_spec=range_spec,
+        )
     else:
         try:
             matches = search_values(
@@ -60,6 +98,9 @@ def search(
                 regex=regex,
                 ignore_case=ignore_case,
                 no_header=no_header,
+                columns=columns,
+                limit=effective_limit,
+                range_spec=range_spec,
             )
         except Exception as e:
             # Polars uses a Rust regex engine that rejects some Python-valid
@@ -74,9 +115,10 @@ def search(
 
     result = {
         "query": query,
+        "file_size_human": file_size_human(path),
         "match_count": len(matches),
         "matches": matches,
-        "truncated": len(matches) >= MAX_SEARCH_RESULTS,
+        "truncated": len(matches) >= effective_limit,
         "search_time_ms": elapsed_ms,
     }
 
@@ -89,11 +131,15 @@ def _search_formulas(
     sheet_name: Optional[str],
     regex: bool,
     ignore_case: bool,
+    columns: Optional[str] = None,
+    limit: int = MAX_SEARCH_RESULTS,
+    range_spec: Optional[Dict] = None,
 ) -> List[Dict]:
     """Search formula strings via openpyxl (slower path)."""
     import re
 
     from openpyxl import load_workbook
+    from openpyxl.utils import get_column_letter
 
     wb = load_workbook(str(path), read_only=True, data_only=False)
 
@@ -110,13 +156,58 @@ def _search_formulas(
     else:
         search_term = query.lower() if ignore_case else query
 
+    # Resolve column filter to a set of allowed column letters
+    allowed_col_letters: set[str] | None = None
+    if columns:
+        from agent_xlsx.utils.validation import resolve_column_letters
+
+        # Attempt to get row-1 headers for header-name resolution
+        headers = None
+        if not range_spec:
+            first_ws = wb[target_sheets[0]]
+            first_row = next(first_ws.iter_rows(min_row=1, max_row=1, values_only=True), None)
+            if first_row:
+                from agent_xlsx.utils.validation import index_to_col_letter
+
+                headers = [
+                    str(v) if v is not None else index_to_col_letter(i)
+                    for i, v in enumerate(first_row)
+                ]
+        allowed_col_letters = resolve_column_letters(columns, headers)
+
+    # Pre-parse range bounds for openpyxl iter_rows
+    iter_kwargs: dict = {}
+    if range_spec:
+        from agent_xlsx.utils.validation import col_letter_to_index
+
+        start_str = range_spec["start"]
+        start_col_str = "".join(c for c in start_str if c.isalpha())
+        start_row_num = int("".join(c for c in start_str if c.isdigit()))
+        iter_kwargs["min_row"] = start_row_num
+        iter_kwargs["min_col"] = col_letter_to_index(start_col_str) + 1  # openpyxl 1-based
+
+        if range_spec.get("end"):
+            end_str = range_spec["end"]
+            end_col_str = "".join(c for c in end_str if c.isalpha())
+            end_row_num = int("".join(c for c in end_str if c.isdigit()))
+            iter_kwargs["max_row"] = end_row_num
+            iter_kwargs["max_col"] = col_letter_to_index(end_col_str) + 1
+        else:
+            iter_kwargs["max_row"] = start_row_num
+            iter_kwargs["max_col"] = iter_kwargs["min_col"]
+
     matches: list[dict] = []
 
     for ws_name in target_sheets:
         ws = wb[ws_name]
-        for row in ws.iter_rows(values_only=False):
+        for row in ws.iter_rows(values_only=False, **iter_kwargs):
             for cell in row:
                 if not (cell.value and isinstance(cell.value, str) and cell.value.startswith("=")):
+                    continue
+
+                # Column filter: skip cells not in allowed columns
+                cell_col_letter = get_column_letter(cell.column)
+                if allowed_col_letters and cell_col_letter not in allowed_col_letters:
                     continue
 
                 formula = cell.value
@@ -137,7 +228,7 @@ def _search_formulas(
                             "formula": formula,
                         }
                     )
-                    if len(matches) >= MAX_SEARCH_RESULTS:
+                    if len(matches) >= limit:
                         wb.close()
                         return matches
 

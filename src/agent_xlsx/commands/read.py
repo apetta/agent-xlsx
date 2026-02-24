@@ -7,7 +7,12 @@ from typing import Optional
 import polars as pl
 import typer
 
-from agent_xlsx.adapters.polars_adapter import get_sheet_names, read_exact_range, read_sheet_data
+from agent_xlsx.adapters.polars_adapter import (
+    get_sheet_headers,
+    get_sheet_names,
+    read_exact_range,
+    read_sheet_data,
+)
 from agent_xlsx.cli import app
 from agent_xlsx.formatters.json_formatter import output_spreadsheet_data
 from agent_xlsx.utils.constants import DEFAULT_LIMIT, DEFAULT_OFFSET, MAX_READ_ROWS
@@ -16,6 +21,7 @@ from agent_xlsx.utils.dates import detect_date_column_indices, excel_serial_to_i
 from agent_xlsx.utils.errors import SheetNotFoundError, handle_error
 from agent_xlsx.utils.validation import (
     col_letter_to_index,
+    file_size_human,
     parse_multi_range,
     parse_range,
     validate_file,
@@ -56,6 +62,12 @@ def read(
         help="Treat row 1 as data, use column letters (A, B, C) as headers. "
         "Use for non-tabular sheets like P&L reports and dashboards.",
     ),
+    headers: bool = typer.Option(
+        False,
+        "--headers",
+        help="Resolve column letters to row-1 header names in range reads. "
+        "Adds column_map to output.",
+    ),
     compact: bool = typer.Option(
         True,
         "--compact/--no-compact",
@@ -70,6 +82,7 @@ def read(
     """Read data from an Excel range or sheet.
 
     Default fast path uses Polars + fastexcel (7-10x faster than openpyxl).
+    Speed scales with file size; check file_size_human in the output.
     Use --formulas to fall back to openpyxl for formula string extraction.
 
     Supports comma-separated ranges (e.g. 'Sheet1!A1:C10,E1:G10') for
@@ -172,6 +185,7 @@ def read(
 
         elapsed_ms = round((time.perf_counter() - start) * 1000, 1)
         result = {
+            "file_size_human": file_size_human(path),
             "results": results,
             "total_ranges": len(results),
             "compact": compact,
@@ -197,6 +211,21 @@ def read(
 
     df = apply_compact(df, compact)
 
+    # Resolve column letters to row-1 header names when --headers is used
+    column_map = None
+    if headers and not no_header and range_info and range_info.get("start"):
+        try:
+            sheet_headers = get_sheet_headers(path, target_sheet)
+            column_map = {}
+            for col_letter in df.columns:
+                idx = col_letter_to_index(col_letter)
+                if idx < len(sheet_headers):
+                    column_map[col_letter] = sheet_headers[idx]
+            rename_map = {letter: name for letter, name in column_map.items() if name}
+            df = df.rename(rename_map)
+        except Exception:
+            pass  # Header resolution is best-effort; don't break reads
+
     if sort and sort in df.columns:
         df = df.sort(sort, descending=descending)
 
@@ -214,6 +243,7 @@ def read(
 
     result = {
         "range": range_str,
+        "file_size_human": file_size_human(path),
         "dimensions": {"rows": len(df), "cols": len(df.columns)},
         "headers": df.columns,
         "data": rows,
@@ -222,6 +252,8 @@ def read(
         "backend": "polars+fastexcel",
         "read_time_ms": elapsed_ms,
     }
+    if column_map:
+        result["column_map"] = column_map
 
     output_spreadsheet_data(result)
 
@@ -375,6 +407,7 @@ def _read_with_formulas(
 
     result = {
         "range": range_str or target_sheet,
+        "file_size_human": file_size_human(path),
         "cells": cells[: limit * 20],  # Cap cell output
         "cell_count": len(cells),
         "truncated": len(cells) > limit * 20,
