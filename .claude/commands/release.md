@@ -3,6 +3,7 @@ name: release
 description: Assess version bump, tag, publish to PyPI, and update changelog
 argument-hint: "[patch|minor|major]"
 disable-model-invocation: true
+allowed-tools: Read, Edit, Grep, Bash(git status *), Bash(git log *), Bash(git diff *), Bash(git add *), Bash(git commit *), Bash(git tag *), Bash(git push *), Bash(uv sync *), Bash(uv run ruff *), Bash(uv run pytest *), Bash(gh release create *), Bash(gh run *), Bash(uvx --refresh *)
 ---
 
 ## State
@@ -49,4 +50,6 @@ Stop and report if any step fails.
 
 11. **Monitor**: `gh run watch $(gh run list --limit 1 --json databaseId -q '.[0].databaseId')` — report final status.
 
-12. **Summary**: Old → new version, PyPI URL, GitHub release URL, CI status.
+12. **Verify**: `uvx --refresh agent-xlsx@X.Y.Z --version` — confirm the published version resolves correctly from PyPI.
+
+13. **Summary**: Old → new version, PyPI URL, GitHub release URL, CI status.
