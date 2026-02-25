@@ -1,7 +1,8 @@
-"""Tests for write command: auto-create, size guard, and formula support."""
+"""Tests for write command: auto-create, size guard, formula support, --value, --from-json."""
 
 import json
 
+from openpyxl import load_workbook
 from typer.testing import CliRunner
 
 from agent_xlsx.cli import app
@@ -254,3 +255,86 @@ def test_write_csv_formula_mixed_content(tmp_path):
     # Formula should be preserved
     formula_cells = [c for c in data["cells"] if c["cell"] == "C1"]
     assert formula_cells[0]["formula"] == "=AVERAGE(C2:M2)"
+
+
+# ---------------------------------------------------------------------------
+# Issue #1 — --value option for negative numbers
+# ---------------------------------------------------------------------------
+
+
+def test_write_negative_number_via_value_option(tmp_path):
+    """--value handles negative numbers that Click would misparse as flags."""
+    out = tmp_path / "neg.xlsx"
+    result = runner.invoke(app, ["write", str(out), "C10", "--value", "-4.095"])
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert data["status"] == "success"
+
+    # Verify the value was written correctly
+    wb = load_workbook(str(out))
+    ws = wb.active
+    assert ws["C10"].value == -4.095
+    wb.close()
+
+
+def test_write_value_option_overrides_positional(tmp_path):
+    """--value takes precedence over the positional value argument."""
+    out = tmp_path / "override.xlsx"
+    result = runner.invoke(app, ["write", str(out), "A1", "positional", "--value", "option-wins"])
+    assert result.exit_code == 0, result.stdout
+
+    wb = load_workbook(str(out))
+    ws = wb.active
+    assert ws["A1"].value == "option-wins"
+    wb.close()
+
+
+def test_write_negative_number_double_dash(tmp_path):
+    """-- sentinel allows negative numbers as positional args."""
+    out = tmp_path / "sentinel.xlsx"
+    result = runner.invoke(app, ["write", str(out), "A1", "--", "-99.5"])
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert data["status"] == "success"
+
+    wb = load_workbook(str(out))
+    ws = wb.active
+    assert ws["A1"].value == -99.5
+    wb.close()
+
+
+# ---------------------------------------------------------------------------
+# Issue #5/6 — --from-json file input
+# ---------------------------------------------------------------------------
+
+
+def test_write_from_json_file(tmp_path):
+    """--from-json reads 2D array data from a JSON file."""
+    json_file = tmp_path / "data.json"
+    json_file.write_text("[[1, 2], [3, 4]]")
+    out = tmp_path / "from_json.xlsx"
+
+    result = runner.invoke(app, ["write", str(out), "A1", "--from-json", str(json_file)])
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert data["status"] == "success"
+    assert data["cells_written"] == 4
+
+    # Verify written data
+    wb = load_workbook(str(out))
+    ws = wb.active
+    assert ws["A1"].value == 1
+    assert ws["B1"].value == 2
+    assert ws["A2"].value == 3
+    assert ws["B2"].value == 4
+    wb.close()
+
+
+def test_write_from_json_file_not_found(tmp_path):
+    """--from-json with non-existent file produces a clear error."""
+    out = tmp_path / "test.xlsx"
+    result = runner.invoke(app, ["write", str(out), "A1", "--from-json", "/tmp/nonexistent.json"])
+    assert result.exit_code == 1
+    data = json.loads(result.stdout)
+    assert data["error"] is True
+    assert data["code"] == "FILE_NOT_FOUND"

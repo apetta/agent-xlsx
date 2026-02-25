@@ -9,12 +9,18 @@ def resolve_engine(command: str, engine: str, *, libreoffice: bool = True) -> st
     Evaluates *engine* (``"auto"``, ``"excel"``, ``"aspose"``,
     ``"libreoffice"`` / ``"lo"``) and returns the concrete engine name.
 
+    When *engine* is ``"auto"`` the ``AGENT_XLSX_ENGINE`` environment variable
+    is checked first.  This lets users pin an engine without modifying every
+    command invocation (useful for CI or sandboxed environments).
+
     Auto-detection priority: Aspose → Excel → LibreOffice (when *libreoffice*
     is ``True``).
 
     Raises an :class:`~agent_xlsx.utils.errors.AgentExcelError` subclass when
     the requested or detected engine is unavailable.
     """
+    import os
+
     from agent_xlsx.adapters.aspose_adapter import is_aspose_available
     from agent_xlsx.adapters.xlwings_adapter import is_excel_available
     from agent_xlsx.utils.errors import (
@@ -24,7 +30,12 @@ def resolve_engine(command: str, engine: str, *, libreoffice: bool = True) -> st
         NoRenderingBackendError,
     )
 
+    # Allow env var to override "auto" — useful for CI / sandbox environments
     engine_lower = engine.lower()
+    if engine_lower == "auto":
+        env_engine = os.environ.get("AGENT_XLSX_ENGINE")
+        if env_engine:
+            engine_lower = env_engine.lower()
 
     if engine_lower == "excel":
         if not is_excel_available():

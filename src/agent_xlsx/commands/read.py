@@ -151,7 +151,7 @@ def read(
             sheet_name = target_sheet if isinstance(target_sheet, str) else available[target_sheet]
             if ranges:
                 for ri in ranges:
-                    df = _read_single_range(
+                    df, oob_warning = _read_single_range(
                         path, target_sheet, ri, no_header, effective_limit, offset
                     )
                     df = apply_compact(df, compact)
@@ -188,6 +188,8 @@ def read(
                     }
                     if column_map:
                         entry["column_map"] = column_map
+                    if oob_warning:
+                        entry["warning"] = oob_warning
                     results.append(entry)
             else:
                 # No range — full sheet read per sheet
@@ -230,8 +232,11 @@ def read(
     target_sheet = target_sheets[0]
     range_info = ranges[0] if ranges else None
 
+    oob_warning = None
     if range_info and range_info["start"]:
-        df = _read_single_range(path, target_sheet, range_info, no_header, effective_limit, offset)
+        df, oob_warning = _read_single_range(
+            path, target_sheet, range_info, no_header, effective_limit, offset
+        )
     else:
         df = read_sheet_data(
             filepath=path,
@@ -286,6 +291,8 @@ def read(
     }
     if column_map:
         result["column_map"] = column_map
+    if oob_warning:
+        result["warning"] = oob_warning
 
     output_spreadsheet_data(result)
 
@@ -302,8 +309,14 @@ def _read_single_range(
     no_header: bool,
     effective_limit: int,
     offset: int,
-) -> pl.DataFrame:
-    """Read a single parsed range from a sheet, returning a DataFrame."""
+) -> tuple[pl.DataFrame, str | None]:
+    """Read a single parsed range from a sheet.
+
+    Returns (DataFrame, warning) where warning is set when the sheet has
+    fewer columns than the requested range (out-of-bounds columns).
+    """
+    warning = None
+
     if range_info and range_info["start"]:
         start_col = "".join(c for c in range_info["start"] if c.isalpha())
         start_row = int("".join(c for c in range_info["start"] if c.isdigit()))
@@ -315,14 +328,39 @@ def _read_single_range(
             end_col = start_col
             end_row = start_row
 
-        return read_exact_range(
+        start_col_idx = col_letter_to_index(start_col)
+        end_col_idx = col_letter_to_index(end_col)
+
+        # Clamp end column to actual sheet width to avoid fastexcel OOB errors
+        from agent_xlsx.adapters.polars_adapter import get_sheet_dimensions
+        from agent_xlsx.utils.validation import index_to_col_letter
+
+        try:
+            dims = get_sheet_dimensions(path, target_sheet)
+            sheet_max_col_idx = dims["cols"] - 1  # 0-based
+            if end_col_idx > sheet_max_col_idx:
+                clamped_end_idx = max(sheet_max_col_idx, start_col_idx)
+                omitted = end_col_idx - clamped_end_idx
+                if omitted > 0:
+                    actual_last_letter = index_to_col_letter(clamped_end_idx)
+                    warning = (
+                        f"Requested through column {end_col} but sheet only has data "
+                        f"through {actual_last_letter}. {omitted} column(s) omitted."
+                    )
+                end_col_idx = clamped_end_idx
+        except Exception:
+            pass  # Dimension check is best-effort; let read_exact_range handle it
+
+        df = read_exact_range(
             filepath=path,
             sheet_name=target_sheet,
-            start_col_idx=col_letter_to_index(start_col),
-            end_col_idx=col_letter_to_index(end_col),
+            start_col_idx=start_col_idx,
+            end_col_idx=end_col_idx,
             start_row=start_row,
             end_row=end_row,
         )
+
+        return df, warning
 
     return read_sheet_data(
         filepath=path,
@@ -330,7 +368,7 @@ def _read_single_range(
         skip_rows=offset,
         n_rows=effective_limit,
         no_header=no_header,
-    )
+    ), None
 
 
 def _apply_date_conversion(

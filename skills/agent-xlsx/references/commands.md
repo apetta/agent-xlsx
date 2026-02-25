@@ -37,6 +37,7 @@ agent-xlsx probe <file> [flags]
 | `--stats` | | bool | false | Add numeric/string summaries (implies --types) |
 | `--full` | | bool | false | Shorthand for --types --sample 3 --stats |
 | `--no-header` | | bool | false | Treat row 1 as data, columns as Excel letters (A, B, C). Use for non-tabular sheets (P&L, dashboards) |
+| `--head-cols` | | int | all | Limit profiling to first N columns (reduces output for wide files). Full headers are always included; column types/nulls/stats/samples are scoped |
 
 **Output:** `sheets[].{name, index, visible, rows, cols, headers, last_col}`, `named_ranges`, `tables`
 
@@ -179,7 +180,12 @@ agent-xlsx format <file> <range> [flags]
 | `--font` | | JSON | | `{"bold": true, "size": 14, "color": "FF0000", "name": "Arial"}` |
 | `--fill` | | JSON | | `{"color": "FFFF00", "fill_type": "solid"}` |
 | `--border` | | JSON | | `{"style": "thin", "color": "000000"}` |
-| `--number-format` | | str | | Number format string (e.g. `"#,##0.00"`) |
+| `--number-format` | `--number` | str | | Number format string (e.g. `"#,##0.00"`) |
+| `--bold/--no-bold` | | bool | | Set font bold (shorthand, avoids JSON) |
+| `--italic/--no-italic` | | bool | | Set font italic (shorthand) |
+| `--font-size` | | float | | Font size in points (shorthand) |
+| `--font-color` | | str | | Font color hex e.g. `FF0000` (shorthand) |
+| `--fill-color` | | str | | Fill color hex e.g. `FFFF00` (shorthand, implies solid fill) |
 | `--copy-from` | | str | | Copy all formatting from this cell |
 | `--output` | `-o` | str | in-place | Save to new file |
 
@@ -198,8 +204,10 @@ agent-xlsx write <file> <cell> [value] [flags]
 | Flag | Alias | Type | Default | Description |
 |------|-------|------|---------|-------------|
 | `--sheet` | `-s` | str | first | Target sheet |
+| `--value` | `-v` | str | | Value to write (alternative to positional arg — handles negative numbers like `--value '-4.095'`) |
 | `--formula` | | bool | false | Single cell: adds '=' prefix if missing. Batch (--json/--from-csv): strings starting with '=' are written as formulas, all other values written as-is |
-| `--json` | | str | | Write 2D JSON array to range |
+| `--json` | | str | | Write 2D JSON array to range (inline) |
+| `--from-json` | | str | | Path to JSON file containing 2D array data for range write |
 | `--from-csv` | | str | | Import CSV file starting at cell |
 | `--number-format` | | str | | Apply number format |
 | `--output` | `-o` | str | in-place | Save to new file |
@@ -284,6 +292,8 @@ agent-xlsx recalc <file> [flags]
 | `--timeout` | | int | 60 | Seconds (LibreOffice only) |
 
 `--check-only` output: `error_summary.{error_type: {count, locations[]}}` — finds #REF!, #DIV/0!, #NAME?, #NULL!, #N/A, #VALUE!, #NUM!
+
+**Env var:** `AGENT_XLSX_ENGINE` — pin the engine for all `--engine auto` commands (e.g. `AGENT_XLSX_ENGINE=libreoffice`). Useful for CI or sandboxed environments where Aspose's CoreCLR may crash.
 
 ---
 

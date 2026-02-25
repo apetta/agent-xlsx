@@ -38,6 +38,11 @@ def probe(
         help="Treat row 1 as data, use column letters (A, B, C) as headers. "
         "Use for non-tabular sheets like P&L reports and dashboards.",
     ),
+    head_cols: Optional[int] = typer.Option(
+        None,
+        "--head-cols",
+        help="Limit profiling to first N columns (reduces output for wide files)",
+    ),
 ) -> None:
     """Ultra-fast workbook profiling — lean by default.
 
@@ -61,6 +66,7 @@ def probe(
         stats=stats,
         include_types=types,
         no_header=no_header,
+        max_columns=head_cols,
     )
 
     output_spreadsheet_data(result)

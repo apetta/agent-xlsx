@@ -142,3 +142,26 @@ def test_read_headers_multi_range_no_header_wins(tabular_xlsx):
     data = json.loads(result.stdout)
     for r in data["results"]:
         assert "column_map" not in r
+
+
+# ---------------------------------------------------------------------------
+# Issue #8 — OOB column warning
+# ---------------------------------------------------------------------------
+
+
+def test_read_oob_columns_returns_warning(tabular_xlsx):
+    """Reading beyond the sheet's data range returns a warning."""
+    # tabular_xlsx has columns A-C (3 columns). Requesting A1:Z2 should warn.
+    result = runner.invoke(app, ["read", str(tabular_xlsx), "A1:Z2"])
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert "warning" in data
+    assert "omitted" in data["warning"].lower() or "column" in data["warning"].lower()
+
+
+def test_read_within_bounds_no_warning(tabular_xlsx):
+    """Reading within the sheet's data range produces no warning."""
+    result = runner.invoke(app, ["read", str(tabular_xlsx), "A1:C2"])
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert "warning" not in data

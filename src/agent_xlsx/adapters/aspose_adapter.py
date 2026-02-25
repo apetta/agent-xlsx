@@ -26,14 +26,46 @@ _LICENSE_APPLIED = False
 _LICENSE_DATA_WARNED = False  # tracks whether the ASPOSE_LICENSE_DATA warning has fired
 
 
-def is_aspose_available() -> bool:
-    """Check whether the aspose-cells-python package is importable."""
-    try:
-        import aspose.cells  # noqa: F401
+_ASPOSE_AVAILABLE: bool | None = None
 
-        return True
-    except Exception:
+
+def is_aspose_available() -> bool:
+    """Check whether the aspose-cells-python package is importable.
+
+    Uses a two-stage check: fast importlib.util.find_spec first, then
+    a subprocess probe to detect CoreCLR sandbox crashes that would
+    otherwise kill the parent process. Result is cached for the process
+    lifetime.
+    """
+    global _ASPOSE_AVAILABLE
+    if _ASPOSE_AVAILABLE is not None:
+        return _ASPOSE_AVAILABLE
+
+    # Fast path: check if package is even installed
+    try:
+        import importlib.util
+
+        if importlib.util.find_spec("aspose.cells") is None:
+            _ASPOSE_AVAILABLE = False
+            return False
+    except (ImportError, ModuleNotFoundError, ValueError):
+        _ASPOSE_AVAILABLE = False
         return False
+
+    # Slow path: import in subprocess to detect CoreCLR sandbox crashes
+    import subprocess
+    import sys
+
+    try:
+        result = subprocess.run(
+            [sys.executable, "-c", "import aspose.cells"],
+            capture_output=True,
+            timeout=10,
+        )
+        _ASPOSE_AVAILABLE = result.returncode == 0
+    except (subprocess.TimeoutExpired, OSError):
+        _ASPOSE_AVAILABLE = False
+    return _ASPOSE_AVAILABLE
 
 
 def _apply_license() -> bool:

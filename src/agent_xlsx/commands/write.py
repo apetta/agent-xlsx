@@ -21,6 +21,13 @@ def write_cmd(
         ..., help="Cell reference (e.g. 'A1', '2022!A1', or 'Sheet1!A1:C3')"
     ),  # noqa: E501
     value: Optional[str] = typer.Argument(None, help="Value to write (for single cell)"),
+    value_opt: Optional[str] = typer.Option(
+        None,
+        "--value",
+        "-v",
+        help="Value to write (alternative to positional arg — "
+        "handles negative numbers like --value '-4.095')",
+    ),
     formula: bool = typer.Option(
         False,
         "--formula",
@@ -29,6 +36,11 @@ def write_cmd(
         "written as formulas, all other values written as-is.",
     ),
     json: Optional[str] = typer.Option(None, "--json", help="JSON array data for range write"),
+    from_json: Optional[str] = typer.Option(
+        None,
+        "--from-json",
+        help="Path to JSON file containing 2D array data for range write",
+    ),
     from_csv: Optional[str] = typer.Option(None, "--from-csv", help="CSV file to read data from"),
     number_format: Optional[str] = typer.Option(
         None,
@@ -46,6 +58,10 @@ def write_cmd(
     """Write values or formulas to specific cells or ranges."""
     path, _is_new = validate_file_for_write(file)
 
+    # --value option takes precedence over positional value arg
+    # (named options handle negative numbers that Click misparses as flags)
+    effective_value = value_opt if value_opt is not None else value
+
     # Parse Sheet!Cell syntax (e.g. "2022!B1" → sheet=2022, cell=B1)
     cell = _normalise_shell_ref(cell)
     if "!" in cell:
@@ -59,7 +75,18 @@ def write_cmd(
     # Build the cell data list for the adapter
     write_data: list[dict] = []
 
-    if json:
+    if from_json:
+        # Read JSON data from a file (avoids shell escaping issues for large payloads)
+        json_path = Path(from_json)
+        if not json_path.exists():
+            raise AgentExcelError(
+                "FILE_NOT_FOUND",
+                f"JSON file '{from_json}' not found",
+                ["Check the JSON file path"],
+            )
+        json_str = json_path.read_text(encoding="utf-8")
+        write_data = _json_to_cells(cell, json_str, formula=formula)
+    elif json:
         # Parse JSON array and map to cells starting at the given cell ref
         write_data = _json_to_cells(cell, json, formula=formula)
     elif from_csv:
@@ -72,9 +99,9 @@ def write_cmd(
                 ["Check the CSV file path"],
             )
         write_data = _csv_to_cells(cell, csv_path, formula=formula)
-    elif value is not None:
+    elif effective_value is not None:
         # Single cell write
-        cell_value = value
+        cell_value = effective_value
         if formula and not cell_value.startswith("="):
             cell_value = f"={cell_value}"
         elif not formula:
@@ -90,8 +117,8 @@ def write_cmd(
             "MISSING_VALUE",
             "No value provided to write",
             [
-                "Provide a value as the third argument",
-                "Use --json for array data",
+                "Provide a value as the third argument (or --value for negatives)",
+                "Use --json or --from-json for array data",
                 "Use --from-csv to read from a CSV file",
             ],
         )

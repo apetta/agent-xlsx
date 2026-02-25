@@ -39,7 +39,18 @@ def format_cmd(
     number_format: Optional[str] = typer.Option(
         None,
         "--number-format",
+        "--number",
         help='Number format string (e.g. "#,##0.00")',
+    ),
+    # Shorthand flags — avoid JSON for common formatting operations
+    bold: Optional[bool] = typer.Option(None, "--bold/--no-bold", help="Set font bold"),
+    italic: Optional[bool] = typer.Option(None, "--italic/--no-italic", help="Set font italic"),
+    font_size: Optional[float] = typer.Option(None, "--font-size", help="Font size (points)"),
+    font_color: Optional[str] = typer.Option(
+        None, "--font-color", help="Font color hex (e.g. FF0000)"
+    ),
+    fill_color: Optional[str] = typer.Option(
+        None, "--fill-color", help="Fill color hex (e.g. FFFF00)"
     ),
     copy_from: Optional[str] = typer.Option(
         None,
@@ -137,14 +148,16 @@ def format_cmd(
         return
 
     # --- Apply mode ---
-    has_formatting = any([font, fill, border, number_format])
+    has_shorthand = any(v is not None for v in [bold, italic, font_size, font_color, fill_color])
+    has_formatting = any([font, fill, border, number_format]) or has_shorthand
     if not has_formatting:
         raise AgentExcelError(
             "MISSING_FORMAT",
             "No formatting options provided",
             [
                 "Use --read to read formatting",
-                "Use --font, --fill, --border, or --number-format to apply formatting",
+                "Use --bold, --italic, --font-size, --font-color, --fill-color for common styles",
+                "Use --font, --fill, --border, or --number-format for full JSON control",
                 "Use --copy-from to copy formatting from another cell",
             ],
         )
@@ -152,6 +165,25 @@ def format_cmd(
     font_opts = _parse_json_opt(font, "font") if font else None
     fill_opts = _parse_json_opt(fill, "fill") if fill else None
     border_opts = _parse_json_opt(border, "border") if border else None
+
+    # Merge shorthand flags into parsed JSON opts (shorthands layer on top)
+    if any(v is not None for v in [bold, italic, font_size, font_color]):
+        if font_opts is None:
+            font_opts = {}
+        if bold is not None:
+            font_opts["bold"] = bold
+        if italic is not None:
+            font_opts["italic"] = italic
+        if font_size is not None:
+            font_opts["size"] = font_size
+        if font_color is not None:
+            font_opts["color"] = font_color
+
+    if fill_color is not None:
+        if fill_opts is None:
+            fill_opts = {}
+        fill_opts["color"] = fill_color
+        fill_opts.setdefault("fill_type", "solid")
 
     if is_multi and ranges:
         target_sheet = _resolve_sheet(cell, sheet, str(path), ranges)

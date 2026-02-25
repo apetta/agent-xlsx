@@ -162,3 +162,101 @@ def test_format_single_range_unchanged(styled_xlsx):
     data = json.loads(result.stdout)
     assert data["status"] == "success"
     assert data["cells_formatted"] == 3
+
+
+# ---------------------------------------------------------------------------
+# Issue #2 — --number alias for --number-format
+# ---------------------------------------------------------------------------
+
+
+def test_format_number_alias(styled_xlsx):
+    """--number works as alias for --number-format."""
+    result = runner.invoke(
+        app,
+        ["format", str(styled_xlsx), "A2:C2", "--number", "0.00"],
+    )
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert data["status"] == "success"
+    assert data["cells_formatted"] == 3
+
+
+# ---------------------------------------------------------------------------
+# Phase 3 — Format shorthand flags
+# ---------------------------------------------------------------------------
+
+
+def test_format_bold_shorthand(styled_xlsx):
+    """--bold shorthand sets font bold without JSON."""
+    result = runner.invoke(
+        app,
+        ["format", str(styled_xlsx), "A1", "--bold"],
+    )
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert data["status"] == "success"
+
+    # Verify bold was applied
+    r = runner.invoke(app, ["format", str(styled_xlsx), "A1", "--read"])
+    assert r.exit_code == 0
+    assert json.loads(r.stdout)["font"]["bold"] is True
+
+
+def test_format_italic_shorthand(styled_xlsx):
+    """--italic shorthand sets font italic without JSON."""
+    result = runner.invoke(
+        app,
+        ["format", str(styled_xlsx), "A1", "--italic"],
+    )
+    assert result.exit_code == 0, result.stdout
+
+    r = runner.invoke(app, ["format", str(styled_xlsx), "A1", "--read"])
+    assert r.exit_code == 0
+    assert json.loads(r.stdout)["font"]["italic"] is True
+
+
+def test_format_fill_color_shorthand(styled_xlsx):
+    """--fill-color shorthand sets solid fill without JSON."""
+    result = runner.invoke(
+        app,
+        ["format", str(styled_xlsx), "A1", "--fill-color", "FFFF00"],
+    )
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert data["status"] == "success"
+
+    # Verify fill was applied
+    r = runner.invoke(app, ["format", str(styled_xlsx), "A1", "--read"])
+    assert r.exit_code == 0
+    fill = json.loads(r.stdout)["fill"]
+    assert fill["type"] == "solid"
+    # Color should contain FFFF00 (may have alpha prefix)
+    assert "FFFF00" in fill["color"].upper()
+
+
+def test_format_shorthand_combines_with_json(styled_xlsx):
+    """Shorthand flags layer on top of --font JSON."""
+    result = runner.invoke(
+        app,
+        ["format", str(styled_xlsx), "A1", "--font", '{"size": 14}', "--bold"],
+    )
+    assert result.exit_code == 0, result.stdout
+
+    r = runner.invoke(app, ["format", str(styled_xlsx), "A1", "--read"])
+    assert r.exit_code == 0
+    font = json.loads(r.stdout)["font"]
+    assert font["bold"] is True
+    assert font["size"] == 14
+
+
+def test_format_no_bold_shorthand(styled_xlsx):
+    """--no-bold explicitly disables bold."""
+    # First make it bold
+    runner.invoke(app, ["format", str(styled_xlsx), "A1", "--bold"])
+    # Then un-bold it
+    result = runner.invoke(app, ["format", str(styled_xlsx), "A1", "--no-bold"])
+    assert result.exit_code == 0, result.stdout
+
+    r = runner.invoke(app, ["format", str(styled_xlsx), "A1", "--read"])
+    assert r.exit_code == 0
+    assert json.loads(r.stdout)["font"]["bold"] is not True

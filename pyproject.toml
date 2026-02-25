@@ -46,7 +46,7 @@ Repository = "https://github.com/apetta/agent-xlsx"
 Issues = "https://github.com/apetta/agent-xlsx/issues"
 
 [project.scripts]
-agent-xlsx = "agent_xlsx.cli:app"
+agent-xlsx = "agent_xlsx.__main__:main"
 
 [build-system]
 requires = ["uv_build>=0.9.17,<0.10.0"]

@@ -186,6 +186,7 @@ def probe_workbook(
     stats: bool = False,
     include_types: bool = False,
     no_header: bool = False,
+    max_columns: int | None = None,
 ) -> dict[str, Any]:
     """Ultra-fast workbook profiling via fastexcel + Polars.
 
@@ -253,31 +254,39 @@ def probe_workbook(
                 sheet = reader.load_sheet(name)
                 df = pl.DataFrame(sheet)
 
+        # Always expose the full schema (all headers)
         sheet_info["headers"] = df.columns
         headers = sheet_info["headers"]
         sheet_info["last_col"] = index_to_col_letter(len(headers) - 1) if headers else "A"
         if not no_header:
             sheet_info["column_map"] = {h: index_to_col_letter(i) for i, h in enumerate(headers)}
 
+        # Optionally limit profiling detail to first N columns
+        profile_df = df
+        if max_columns is not None and max_columns < len(df.columns):
+            profile_df = df.select(df.columns[:max_columns])
+            sheet_info["profiled_columns"] = max_columns
+            sheet_info["columns_truncated"] = True
+
         if include_types:
             # Null counts per column — compute first so we can filter other sections
             fully_null_set: set[str] = set()
-            if len(df) > 0:
-                null_row = df.null_count().row(0)
-                all_null_counts = dict(zip(df.columns, null_row))
+            if len(profile_df) > 0:
+                null_row = profile_df.null_count().row(0)
+                all_null_counts = dict(zip(profile_df.columns, null_row))
                 sheet_info["null_counts"] = {
-                    col: count for col, count in all_null_counts.items() if count < len(df)
+                    col: count for col, count in all_null_counts.items() if count < len(profile_df)
                 }
                 fully_null_set = set(all_null_counts.keys()) - set(sheet_info["null_counts"].keys())
                 if fully_null_set:
                     sheet_info["fully_null_columns"] = len(fully_null_set)
             else:
-                sheet_info["null_counts"] = {col: 0 for col in df.columns}
+                sheet_info["null_counts"] = {col: 0 for col in profile_df.columns}
 
             # Column types — omit fully-null columns (zero information)
             sheet_info["column_types"] = {
                 col: _polars_dtype_to_str(dtype)
-                for col, dtype in zip(df.columns, df.dtypes)
+                for col, dtype in zip(profile_df.columns, profile_df.dtypes)
                 if col not in fully_null_set
             }
 
@@ -304,18 +313,18 @@ def probe_workbook(
 
             # Potential header detection for non-tabular sheets
             if no_header:
-                potential = _detect_potential_headers(df)
+                potential = _detect_potential_headers(profile_df)
                 if potential:
                     sheet_info["potential_headers"] = potential
 
         # Sample data (head + tail) — sparse dict format to reduce token waste
         capped_sample = min(sample_rows, MAX_SAMPLE_ROWS)
-        if capped_sample > 0 and len(df) > 0:
+        if capped_sample > 0 and len(profile_df) > 0:
             date_col_set = {
                 col for col, t in sheet_info.get("column_types", {}).items() if t == "date"
             }
-            head_rows = _df_to_sparse_rows(df.head(capped_sample))
-            tail_rows = _df_to_sparse_rows(df.tail(capped_sample))
+            head_rows = _df_to_sparse_rows(profile_df.head(capped_sample))
+            tail_rows = _df_to_sparse_rows(profile_df.tail(capped_sample))
             # Convert Excel serial numbers to ISO dates in sparse dicts
             if date_col_set:
                 for row in head_rows + tail_rows:
@@ -335,37 +344,39 @@ def probe_workbook(
             }
 
         # Extended statistics via Polars describe()
-        if stats and len(df) > 0:
+        if stats and len(profile_df) > 0:
             # Identify fully-null columns to exclude from stats (noise reduction)
             null_counts = sheet_info.get("null_counts", {})
-            fully_null_cols = {col for col, count in null_counts.items() if count >= len(df)}
+            fully_null_cols = {
+                col for col, count in null_counts.items() if count >= len(profile_df)
+            }
 
             date_col_set = {
                 col for col, t in sheet_info.get("column_types", {}).items() if t == "date"
             }
             numeric_cols = [
                 col
-                for col, dtype in zip(df.columns, df.dtypes)
+                for col, dtype in zip(profile_df.columns, profile_df.dtypes)
                 if dtype.is_numeric() and col not in date_col_set and col not in fully_null_cols
             ]
             if numeric_cols:
-                sheet_info["numeric_summary"] = _build_numeric_summary(df, numeric_cols)
+                sheet_info["numeric_summary"] = _build_numeric_summary(profile_df, numeric_cols)
 
             string_cols = [
                 col
-                for col, dtype in zip(df.columns, df.dtypes)
+                for col, dtype in zip(profile_df.columns, profile_df.dtypes)
                 if dtype == pl.Utf8
                 and col not in fully_null_cols
-                and null_counts.get(col, 0) < 0.5 * len(df)
+                and null_counts.get(col, 0) < 0.5 * len(profile_df)
             ]
             if string_cols:
-                sheet_info["string_summary"] = _build_string_summary(df, string_cols)
+                sheet_info["string_summary"] = _build_string_summary(profile_df, string_cols)
 
             # Date column summary (min/max as ISO dates)
             if date_col_set:
                 date_summary = {}
                 for col in date_col_set:
-                    series = df[col].drop_nulls()
+                    series = profile_df[col].drop_nulls()
                     if len(series) > 0:
                         min_val = _safe_scalar(series.min())
                         max_val = _safe_scalar(series.max())
