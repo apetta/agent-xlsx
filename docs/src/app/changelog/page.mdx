@@ -2,6 +2,19 @@ export const metadata = { title: "Changelog" }
 
 # Changelog
 
+## V0.6.0 (FEBRUARY 2026)
+
+Format shorthands, structured error handling, and reliability fixes.
+
+- Added format shorthand flags (`--bold`, `--italic`, `--font-size`, `--font-color`, `--fill-color`) and multi-range format support in a single call
+- Added `write --value` for shell-safe negative numbers and `--from-json` for file-based 2D array input
+- Added `probe --head-cols` to limit column profiling on wide files
+- Added structured CLI error handling — emits JSON with actionable `suggestion` fields instead of raw tracebacks
+- Fixed `EmptyCell` crash in `--formulas` mode, multi-range `--output` overwrites in `format`, and OOB column range crashes in `read`
+- Fixed openpyxl 3.1+ compatibility — replaced private `_cf_rules` and `_hyperlinks` accessors with stable public APIs
+- Integrated `ty` type checker into CI and pre-commit hooks
+- Added ~3,700 lines of new tests across 13 test modules
+
 ## V0.5.1 (FEBRUARY 2026)
 
 Bug fixes from real-world agent pipeline testing.
