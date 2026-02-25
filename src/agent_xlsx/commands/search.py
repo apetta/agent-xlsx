@@ -11,7 +11,7 @@ from agent_xlsx.cli import app
 from agent_xlsx.formatters.json_formatter import output_spreadsheet_data
 from agent_xlsx.utils.constants import MAX_SEARCH_LIMIT, MAX_SEARCH_RESULTS
 from agent_xlsx.utils.errors import InvalidRegexError, SheetNotFoundError, handle_error
-from agent_xlsx.utils.validation import file_size_human, parse_range, validate_file
+from agent_xlsx.utils.validation import ParsedRange, file_size_human, parse_range, validate_file
 
 
 @app.command()
@@ -133,7 +133,7 @@ def _search_formulas(
     ignore_case: bool,
     columns: Optional[str] = None,
     limit: int = MAX_SEARCH_RESULTS,
-    range_spec: Optional[Dict] = None,
+    range_spec: ParsedRange | None = None,
 ) -> List[Dict]:
     """Search formula strings via openpyxl (slower path)."""
     import re
@@ -184,8 +184,8 @@ def _search_formulas(
         iter_kwargs["min_row"] = start_row_num
         iter_kwargs["min_col"] = col_letter_to_index(start_col_str) + 1  # openpyxl 1-based
 
-        if range_spec.get("end"):
-            end_str = range_spec["end"]
+        end_str = range_spec["end"]
+        if end_str:
             end_col_str = "".join(c for c in end_str if c.isalpha())
             end_row_num = int("".join(c for c in end_str if c.isdigit()))
             iter_kwargs["max_row"] = end_row_num

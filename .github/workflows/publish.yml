@@ -20,6 +20,8 @@ jobs:
 
       - run: uv run ruff check && uv run ruff format --check
 
+      - run: uv run ty check
+
       - run: uv run pytest
 
   publish:

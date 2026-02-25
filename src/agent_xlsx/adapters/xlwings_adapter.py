@@ -83,7 +83,7 @@ def _pick_sample_indices(start: int, end: int, count: int = 5) -> list[int]:
         indices[-1] = end
     # Deduplicate while preserving order
     seen: set[int] = set()
-    return [x for x in indices if not (x in seen or seen.add(x))]  # type: ignore[func-returns-value]
+    return [x for x in indices if not (x in seen or seen.add(x))]
 
 
 def _find_data_range(sheet):  # noqa: ANN001

@@ -21,6 +21,7 @@ from agent_xlsx.utils.dataframe import apply_compact
 from agent_xlsx.utils.dates import detect_date_column_indices, excel_serial_to_isodate
 from agent_xlsx.utils.errors import SheetNotFoundError, handle_error
 from agent_xlsx.utils.validation import (
+    ParsedRange,
     col_letter_to_index,
     file_size_human,
     parse_multi_range,
@@ -104,6 +105,7 @@ def read(
     is_multi_range = range_ is not None and "," in range_
 
     if is_multi_range:
+        assert range_ is not None  # Guaranteed by is_multi_range check above
         ranges = parse_multi_range(range_)
     elif range_:
         ranges = [parse_range(range_)]
@@ -306,7 +308,7 @@ def read(
 def _read_single_range(
     path: Path,
     target_sheet: str | int,
-    range_info: dict,
+    range_info: ParsedRange,
     no_header: bool,
     effective_limit: int,
     offset: int,

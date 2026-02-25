@@ -173,7 +173,7 @@ def screenshot(
     if sheet_name:
         target_sheets = [s.strip() for s in sheet_name.split(",")]
     else:
-        target_sheets = [wb.worksheets[i].name for i in range(len(wb.worksheets))]
+        target_sheets = [wb.worksheets[i].name for i in range(len(wb.worksheets))]  # ty: ignore[invalid-argument-type]  # aspose stub missing __len__
 
     # Output directory
     if output_path is None:
@@ -326,7 +326,7 @@ def get_objects(
     if sheet_name:
         target_names = [s.strip() for s in sheet_name.split(",")]
     else:
-        target_names = [wb.worksheets[i].name for i in range(len(wb.worksheets))]
+        target_names = [wb.worksheets[i].name for i in range(len(wb.worksheets))]  # ty: ignore[invalid-argument-type]  # aspose stub missing __len__
 
     sheets_info: list[dict[str, Any]] = []
 
@@ -428,7 +428,7 @@ def export_chart(
     if sheet_name:
         target_names = [s.strip() for s in sheet_name.split(",")]
     else:
-        target_names = [wb.worksheets[i].name for i in range(len(wb.worksheets))]
+        target_names = [wb.worksheets[i].name for i in range(len(wb.worksheets))]  # ty: ignore[invalid-argument-type]  # aspose stub missing __len__
 
     # Search for chart by name
     target_chart = None

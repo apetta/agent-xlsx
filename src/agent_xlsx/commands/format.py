@@ -9,7 +9,7 @@ from agent_xlsx.cli import app
 from agent_xlsx.formatters import json_formatter
 from agent_xlsx.formatters.json_formatter import output_spreadsheet_data
 from agent_xlsx.utils.errors import AgentExcelError, handle_error
-from agent_xlsx.utils.validation import _normalise_shell_ref, validate_file
+from agent_xlsx.utils.validation import ParsedRange, _normalise_shell_ref, validate_file
 
 
 @app.command("format")
@@ -250,7 +250,7 @@ def _resolve_sheet(
     cell: str,
     sheet: str | None,
     filepath: str,
-    ranges: list[dict],
+    ranges: list[ParsedRange],
 ) -> str:
     """Resolve the target sheet for multi-range operations.
 

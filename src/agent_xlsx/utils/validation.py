@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
+from typing import TypedDict
 
 from agent_xlsx.utils.constants import EXCEL_EXTENSIONS, WRITABLE_EXTENSIONS
 from agent_xlsx.utils.errors import (
@@ -13,6 +14,14 @@ from agent_xlsx.utils.errors import (
     InvalidFormatError,
     RangeInvalidError,
 )
+
+
+class ParsedRange(TypedDict):
+    """Typed representation of a parsed Excel range reference."""
+
+    sheet: str | None
+    start: str  # Always present — regex group is mandatory
+    end: str | None  # None for single-cell references (e.g. "A1")
 
 
 def validate_file(filepath: str) -> Path:
@@ -82,7 +91,7 @@ def _normalise_shell_ref(ref: str) -> str:
     return ref.replace("\\!", "!")
 
 
-def parse_range(range_str: str) -> dict[str, str | None]:
+def parse_range(range_str: str) -> ParsedRange:
     """Parse an Excel range string like 'Sheet1!A1:C10'.
 
     Returns dict with keys: sheet, start, end (end may be None for single cell).
@@ -90,14 +99,14 @@ def parse_range(range_str: str) -> dict[str, str | None]:
     m = _RANGE_RE.match(_normalise_shell_ref(range_str).strip())
     if not m:
         raise RangeInvalidError(range_str)
-    return {
-        "sheet": m.group("sheet"),
-        "start": m.group("start").upper(),
-        "end": m.group("end").upper() if m.group("end") else None,
-    }
+    return ParsedRange(
+        sheet=m.group("sheet"),
+        start=m.group("start").upper(),
+        end=m.group("end").upper() if m.group("end") else None,
+    )
 
 
-def parse_multi_range(range_str: str) -> list[dict[str, str | None]]:
+def parse_multi_range(range_str: str) -> list[ParsedRange]:
     """Parse comma-separated ranges like ``Sheet!A1:C10,E1:G10`` into a list.
 
     The sheet prefix from the first range carries forward to subsequent
@@ -105,7 +114,7 @@ def parse_multi_range(range_str: str) -> list[dict[str, str | None]]:
     ``"2022!H54:AT54,H149:AT149"`` → both ranges on sheet ``"2022"``.
     """
     parts = range_str.split(",")
-    results: list[dict[str, str | None]] = []
+    results: list[ParsedRange] = []
     sheet_ctx: str | None = None
     for part in parts:
         part = part.strip()

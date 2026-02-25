@@ -24,6 +24,7 @@ from agent_xlsx.utils.dates import (
 )
 from agent_xlsx.utils.errors import SheetNotFoundError
 from agent_xlsx.utils.validation import (
+    ParsedRange,
     col_letter_to_index,
     file_size_bytes,
     file_size_human,
@@ -417,7 +418,7 @@ def probe_workbook(
     # Named ranges and tables (fast via fastexcel)
     try:
         defined = reader.defined_names()
-        result["named_ranges"] = [n["name"] for n in defined] if defined else []
+        result["named_ranges"] = [n.name for n in defined] if defined else []
     except Exception:
         result["named_ranges"] = []
 
@@ -441,7 +442,7 @@ def search_values(
     no_header: bool = False,
     columns: str | None = None,
     limit: int = MAX_SEARCH_RESULTS,
-    range_spec: dict | None = None,
+    range_spec: ParsedRange | None = None,
 ) -> list[dict[str, Any]]:
     """Search for values across sheets using Polars string matching.
 
@@ -481,13 +482,14 @@ def search_values(
         if m:
             r_start_col_idx = col_letter_to_index(m.group(1))
             r_start_row = int(m.group(2))
-        if range_spec.get("end"):
-            end_str = range_spec["end"]
+        end_str = range_spec["end"]
+        if end_str:
             m2 = _re.match(r"^([A-Z]+)(\d+)$", end_str.upper())
             if m2:
                 r_end_col_idx = col_letter_to_index(m2.group(1))
                 r_end_row = int(m2.group(2))
-                r_use_cols = list(range(r_start_col_idx, r_end_col_idx + 1))
+                if r_start_col_idx is not None:
+                    r_use_cols = list(range(r_start_col_idx, r_end_col_idx + 1))
         else:
             # Single cell range
             r_end_row = r_start_row
@@ -508,7 +510,7 @@ def search_values(
                     header_row=None,
                     skip_rows=r_start_row - 1,
                     n_rows=r_end_row - r_start_row + 1,
-                    **({"use_columns": r_use_cols} if r_use_cols else {}),
+                    use_columns=r_use_cols,
                 )
                 df = pl.DataFrame(sheet)
                 # Rename columns to Excel letters matching range positions
