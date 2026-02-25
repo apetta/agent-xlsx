@@ -273,7 +273,7 @@ def read(
         _output_csv(df)
         return
 
-    sheet_name_str = target_sheet if isinstance(target_sheet, str) else df.columns[0]
+    sheet_name_str = target_sheet if isinstance(target_sheet, str) else available[target_sheet]
     range_str = range_ or f"{sheet_name_str}"
 
     rows = _df_to_serialisable_rows(df)

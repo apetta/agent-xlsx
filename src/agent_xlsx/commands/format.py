@@ -111,15 +111,22 @@ def format_cmd(
     if copy_from:
         if is_multi and ranges:
             target_sheet = _resolve_sheet(cell, sheet, str(path), ranges)
+            # When --output is used, subsequent iterations must read from the output
+            # file (not the original source) to preserve earlier range formatting.
+            # Use the adapter's actual save path (output_file) since non-writable
+            # extensions like .xls are auto-converted to .xlsx by the adapter.
+            working_path = str(path)
             for ri in ranges:
                 range_str = f"{ri['start']}:{ri['end']}" if ri.get("end") else ri["start"]
-                oxl.copy_formatting(
-                    str(path),
+                copy_result = oxl.copy_formatting(
+                    working_path,
                     sheet_name=target_sheet,
                     source_ref=copy_from,
                     target_ref=range_str,
                     output_path=output,
                 )
+                if output:
+                    working_path = copy_result.get("output_file", output)
             json_formatter.output(
                 {
                     "status": "success",
@@ -188,10 +195,15 @@ def format_cmd(
     if is_multi and ranges:
         target_sheet = _resolve_sheet(cell, sheet, str(path), ranges)
         total_formatted = 0
+        # When --output is used, subsequent iterations must read from the output
+        # file (not the original source) to preserve earlier range formatting.
+        # Use the adapter's actual save path (output_file) since non-writable
+        # extensions like .xls are auto-converted to .xlsx by the adapter.
+        working_path = str(path)
         for ri in ranges:
             range_str = f"{ri['start']}:{ri['end']}" if ri.get("end") else ri["start"]
             result = oxl.apply_formatting(
-                str(path),
+                working_path,
                 sheet_name=target_sheet,
                 cell_ref=range_str,
                 font_opts=font_opts,
@@ -200,6 +212,8 @@ def format_cmd(
                 number_format=number_format,
                 output_path=output,
             )
+            if output:
+                working_path = result.get("output_file", output)
             total_formatted += result.get("cells_formatted", 0)
         json_formatter.output(
             {

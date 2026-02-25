@@ -388,3 +388,25 @@ def test_read_truncated_flag_when_below_limit(multisheet_xlsx):
     assert result.exit_code == 0, result.stdout
     data = json.loads(result.stdout)
     assert data["truncated"] is False
+
+
+# ---------------------------------------------------------------------------
+# Regression: range field should be sheet name, not column header
+# ---------------------------------------------------------------------------
+
+
+def test_read_default_range_field_is_sheet_name(tabular_xlsx):
+    """Default read (no range) should set range field to sheet name, not column header.
+
+    Regression: read.py used df.columns[0] (e.g. "Product") instead of the actual
+    sheet name when target_sheet was an integer index. Fixed to resolve via
+    available[target_sheet].
+    """
+    result = runner.invoke(app, ["read", str(tabular_xlsx)])
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    # tabular_xlsx has sheet named "Sales" with first column header "Product"
+    assert data["range"] == "Sales", (
+        f"Expected sheet name 'Sales' in range field, got '{data['range']}'"
+    )
+    assert data["range"] != "Product", "range field must not be the column header"

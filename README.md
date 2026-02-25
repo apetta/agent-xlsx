@@ -310,7 +310,7 @@ agent-xlsx inspect data.xlsx --sheet Sales --range A1:C10
 agent-xlsx inspect data.xlsx --names
 agent-xlsx inspect data.xlsx --charts
 agent-xlsx inspect data.xlsx --comments
-agent-xlsx inspect data.xlsx --conditional "A1:Z100"
+agent-xlsx inspect data.xlsx --conditional Sales
 agent-xlsx inspect data.xlsx --validation Sales
 agent-xlsx inspect data.xlsx --hyperlinks Sales
 ```

@@ -1,5 +1,8 @@
 """Shared pytest fixtures for agent-xlsx tests."""
 
+import shutil
+from pathlib import Path
+
 import pytest
 from openpyxl import Workbook
 from openpyxl.comments import Comment
@@ -231,3 +234,19 @@ def unicode_xlsx(tmp_path):
     p = tmp_path / "unicode.xlsx"
     wb.save(p)
     return p
+
+
+@pytest.fixture
+def vba_xlsm(tmp_path):
+    """Committed .xlsm with real VBA modules for oletools extraction/security tests.
+
+    Contains Module1 with Sub TestMacro(), Function AddNumbers(), Sub Auto_Open().
+    Also has auto-generated ThisWorkbook.cls and Sheet1.cls document modules.
+    Created with Aspose.Cells — oletools detects Auto_Open as auto-execute trigger.
+    """
+    source = Path(__file__).parent / "fixtures" / "vba_sample.xlsm"
+    if not source.exists():
+        pytest.skip("VBA fixture not available (tests/fixtures/vba_sample.xlsm)")
+    dest = tmp_path / "vba_sample.xlsm"
+    shutil.copy(source, dest)
+    return dest

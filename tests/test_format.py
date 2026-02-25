@@ -260,3 +260,75 @@ def test_format_no_bold_shorthand(styled_xlsx):
     r = runner.invoke(app, ["format", str(styled_xlsx), "A1", "--read"])
     assert r.exit_code == 0
     assert json.loads(r.stdout)["font"]["bold"] is not True
+
+
+# ---------------------------------------------------------------------------
+# Regression: multi-range --output preserves all ranges
+# ---------------------------------------------------------------------------
+
+
+def test_format_multi_range_output_preserves_all(styled_xlsx, tmp_path):
+    """Multi-range format with --output preserves formatting from all ranges.
+
+    Regression: multi-range format with --output always loaded from the original
+    source file, so each iteration's save overwrote the previous. Only the last
+    range's formatting survived. Fixed with working_path variable that switches
+    to the output file after the first iteration.
+    """
+    from openpyxl import load_workbook
+
+    out = tmp_path / "formatted.xlsx"
+    result = runner.invoke(
+        app,
+        [
+            "format",
+            str(styled_xlsx),
+            "A1:A1,B1:B1",
+            "--bold",
+            "--output",
+            str(out),
+        ],
+    )
+    assert result.exit_code == 0, result.stdout
+
+    # Verify BOTH cells are bold in the output file
+    wb = load_workbook(str(out))
+    ws = wb.active
+    assert ws["A1"].font.bold is True, "A1 should be bold (first range)"
+    assert ws["B1"].font.bold is True, "B1 should be bold (second range)"
+    wb.close()
+
+
+def test_format_multi_range_output_non_writable_extension(styled_xlsx, tmp_path):
+    """Multi-range format with --output using a non-writable extension (.xls).
+
+    Regression: the adapter auto-converts non-writable extensions to .xlsx
+    (e.g. out.xls → out.xlsx). The working_path must use the adapter's actual
+    save path, not the raw user-provided output string, otherwise iteration 2
+    tries to load a file that doesn't exist.
+    """
+    from openpyxl import load_workbook
+
+    # Use .xls extension — adapter will auto-convert to .xlsx
+    out = tmp_path / "formatted.xls"
+    result = runner.invoke(
+        app,
+        [
+            "format",
+            str(styled_xlsx),
+            "A1:A1,B1:B1",
+            "--bold",
+            "--output",
+            str(out),
+        ],
+    )
+    assert result.exit_code == 0, result.stdout
+
+    # Adapter converts .xls → .xlsx; verify the actual file exists and has both ranges
+    actual_out = tmp_path / "formatted.xlsx"
+    assert actual_out.exists(), "Adapter should auto-convert .xls to .xlsx"
+    wb = load_workbook(str(actual_out))
+    ws = wb.active
+    assert ws["A1"].font.bold is True, "A1 should be bold (first range)"
+    assert ws["B1"].font.bold is True, "B1 should be bold (second range)"
+    wb.close()
