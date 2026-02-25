@@ -344,3 +344,54 @@ def test_search_file_size_human_present(sample_xlsx):
     data = json.loads(result.stdout)
     assert "file_size_human" in data
     assert isinstance(data["file_size_human"], str)
+
+
+# ---------------------------------------------------------------------------
+# Basic search, --regex, --ignore-case, unicode
+# ---------------------------------------------------------------------------
+
+
+def test_search_basic(sample_xlsx):
+    """Basic search returns matching rows."""
+    result = runner.invoke(app, ["search", str(sample_xlsx), "value1"])
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert data["match_count"] >= 1
+    assert any("value1" in str(m.get("value", "")) for m in data["matches"])
+
+
+def test_search_regex(wide_xlsx):
+    """--regex treats query as a regex pattern."""
+    result = runner.invoke(app, ["search", str(wide_xlsx), "Item-1\\d", "--regex"])
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    # Should match Item-10 through Item-19 (and possibly Item-1 depending on anchoring)
+    assert data["match_count"] >= 1
+    for m in data["matches"]:
+        assert "Item-1" in str(m.get("value", ""))
+
+
+def test_search_regex_invalid(sample_xlsx):
+    """--regex with an invalid pattern returns INVALID_REGEX error."""
+    result = runner.invoke(app, ["search", str(sample_xlsx), "[invalid(", "--regex"])
+    assert result.exit_code == 1
+    data = json.loads(result.stdout)
+    assert data["error"] is True
+    assert data["code"] == "INVALID_REGEX"
+
+
+def test_search_ignore_case(wide_xlsx):
+    """--ignore-case matches regardless of case."""
+    result = runner.invoke(app, ["search", str(wide_xlsx), "target", "--ignore-case"])
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    # "TARGET" is in the fixture at row 10 across columns A, B, D
+    assert data["match_count"] >= 1
+
+
+def test_search_unicode(unicode_xlsx):
+    """Search finds Unicode/CJK content."""
+    result = runner.invoke(app, ["search", str(unicode_xlsx), "\u5c71\u7530\u592a\u90ce"])
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert data["match_count"] >= 1

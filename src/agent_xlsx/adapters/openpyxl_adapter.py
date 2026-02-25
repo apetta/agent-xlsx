@@ -255,10 +255,10 @@ def get_full_sheet_inspection(filepath: str | Path, sheet_name: str) -> dict[str
 
         # --- Conditional formatting ---
         cf_rules: list[dict[str, Any]] = []
-        for cf_range, rule_list in ws.conditional_formatting._cf_rules:
-            for rule in rule_list:
+        for cf in ws.conditional_formatting:
+            for rule in cf.rules:
                 rule_data: dict[str, Any] = {
-                    "range": str(cf_range),
+                    "range": str(cf.sqref),
                     "type": rule.type,
                     "priority": rule.priority,
                 }
@@ -292,16 +292,19 @@ def get_full_sheet_inspection(filepath: str | Path, sheet_name: str) -> dict[str
                 dv_rules.append(val_data)
 
         # --- Hyperlinks ---
+        # Read from cell objects (openpyxl 3.1+ stores hyperlinks on cells, not _hyperlinks)
         link_items: list[dict[str, Any]] = []
-        for hl in ws._hyperlinks:
-            link_items.append(
-                {
-                    "cell": hl.ref,
-                    "target": hl.target,
-                    "display": hl.display,
-                    "tooltip": hl.tooltip,
-                }
-            )
+        for row in ws.iter_rows():
+            for cell in row:
+                if cell.hyperlink:
+                    link_items.append(
+                        {
+                            "cell": f"{get_column_letter(cell.column)}{cell.row}",
+                            "target": cell.hyperlink.target,
+                            "display": cell.hyperlink.display,
+                            "tooltip": cell.hyperlink.tooltip,
+                        }
+                    )
 
         # --- Build result with capping ---
         result: dict[str, Any] = {
@@ -494,10 +497,10 @@ def get_conditional_formatting(filepath: str | Path, sheet_name: str) -> list[di
     try:
         ws = wb[sheet_name]
         rules: list[dict[str, Any]] = []
-        for cf_range, rule_list in ws.conditional_formatting._cf_rules:
-            for rule in rule_list:
+        for cf in ws.conditional_formatting:
+            for rule in cf.rules:
                 rule_data: dict[str, Any] = {
-                    "range": str(cf_range),
+                    "range": str(cf.sqref),
                     "type": rule.type,
                     "priority": rule.priority,
                 }
@@ -557,16 +560,19 @@ def get_hyperlinks(filepath: str | Path, sheet_name: str) -> list[dict[str, Any]
     wb = load_workbook(str(filepath))
     try:
         ws = wb[sheet_name]
+        # Read from cell objects (openpyxl 3.1+ stores hyperlinks on cells, not _hyperlinks)
         links: list[dict[str, Any]] = []
-        for hl in ws._hyperlinks:
-            links.append(
-                {
-                    "cell": hl.ref,
-                    "target": hl.target,
-                    "display": hl.display,
-                    "tooltip": hl.tooltip,
-                }
-            )
+        for row in ws.iter_rows():
+            for cell in row:
+                if cell.hyperlink:
+                    links.append(
+                        {
+                            "cell": f"{get_column_letter(cell.column)}{cell.row}",
+                            "target": cell.hyperlink.target,
+                            "display": cell.hyperlink.display,
+                            "tooltip": cell.hyperlink.tooltip,
+                        }
+                    )
         return links
     finally:
         wb.close()

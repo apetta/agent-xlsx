@@ -202,3 +202,189 @@ def test_read_formulas_with_empty_cells(sparse_xlsx):
     # Verify formulas are captured
     formulas = [c for c in data["cells"] if c.get("formula")]
     assert len(formulas) >= 2  # B2, B3, B5 have formulas
+
+
+# ---------------------------------------------------------------------------
+# --sheet flag
+# ---------------------------------------------------------------------------
+
+
+def test_read_sheet_flag(multisheet_xlsx):
+    """--sheet selects the specified sheet for reading."""
+    result = runner.invoke(app, ["read", str(multisheet_xlsx), "--sheet", "Beta"])
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert data["headers"] == ["ID", "Value"]
+    assert data["row_count"] == 10
+
+
+def test_read_sheet_not_found(multisheet_xlsx):
+    """--sheet with a non-existent name produces a SHEET_NOT_FOUND error."""
+    result = runner.invoke(app, ["read", str(multisheet_xlsx), "--sheet", "DoesNotExist"])
+    assert result.exit_code == 1
+    data = json.loads(result.stdout)
+    assert data["error"] is True
+    assert data["code"] == "SHEET_NOT_FOUND"
+
+
+# ---------------------------------------------------------------------------
+# --limit flag
+# ---------------------------------------------------------------------------
+
+
+def test_read_limit(multisheet_xlsx):
+    """--limit caps the number of returned rows."""
+    result = runner.invoke(app, ["read", str(multisheet_xlsx), "--sheet", "Beta", "--limit", "3"])
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert data["row_count"] == 3
+    assert len(data["data"]) == 3
+
+
+# ---------------------------------------------------------------------------
+# --offset flag
+# ---------------------------------------------------------------------------
+
+
+def test_read_offset(multisheet_xlsx):
+    """--offset skips the specified number of rows."""
+    # Beta has 10 data rows. Offset 5 should leave 5 rows.
+    result = runner.invoke(app, ["read", str(multisheet_xlsx), "--sheet", "Beta", "--offset", "5"])
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert data["row_count"] == 5
+
+
+# ---------------------------------------------------------------------------
+# --limit + --offset combined
+# ---------------------------------------------------------------------------
+
+
+def test_read_limit_and_offset(multisheet_xlsx):
+    """--limit + --offset work together: skip first N rows then cap at M."""
+    result = runner.invoke(
+        app,
+        ["read", str(multisheet_xlsx), "--sheet", "Beta", "--offset", "2", "--limit", "3"],
+    )
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert data["row_count"] == 3
+    assert len(data["data"]) == 3
+
+
+# ---------------------------------------------------------------------------
+# --sort ascending
+# ---------------------------------------------------------------------------
+
+
+def test_read_sort_ascending(multisheet_xlsx):
+    """--sort sorts rows by the specified column in ascending order."""
+    result = runner.invoke(
+        app, ["read", str(multisheet_xlsx), "--sheet", "Alpha", "--sort", "Score"]
+    )
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    score_idx = data["headers"].index("Score")
+    scores = [row[score_idx] for row in data["data"]]
+    assert scores == sorted(scores)
+
+
+# ---------------------------------------------------------------------------
+# --sort --descending
+# ---------------------------------------------------------------------------
+
+
+def test_read_sort_descending(multisheet_xlsx):
+    """--sort --descending sorts rows in descending order."""
+    result = runner.invoke(
+        app,
+        ["read", str(multisheet_xlsx), "--sheet", "Alpha", "--sort", "Score", "--descending"],
+    )
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    score_idx = data["headers"].index("Score")
+    scores = [row[score_idx] for row in data["data"]]
+    assert scores == sorted(scores, reverse=True)
+
+
+# ---------------------------------------------------------------------------
+# --compact (default) and --no-compact
+# ---------------------------------------------------------------------------
+
+
+def test_read_compact_default(compact_xlsx):
+    """Default compact mode drops the fully-null NullCol column."""
+    result = runner.invoke(app, ["read", str(compact_xlsx)])
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert "NullCol" not in data["headers"]
+    assert "Name" in data["headers"]
+
+
+def test_read_no_compact(compact_xlsx):
+    """--no-compact preserves fully-null columns."""
+    result = runner.invoke(app, ["read", str(compact_xlsx), "--no-compact"])
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert "NullCol" in data["headers"]
+    assert len(data["headers"]) == 4
+
+
+# ---------------------------------------------------------------------------
+# --all-sheets
+# ---------------------------------------------------------------------------
+
+
+def test_read_all_sheets(multisheet_xlsx):
+    """--all-sheets reads every sheet and returns a results array."""
+    result = runner.invoke(app, ["read", str(multisheet_xlsx), "--all-sheets"])
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert "results" in data
+    assert data["total_ranges"] == 3
+    sheet_names = [r["sheet"] for r in data["results"]]
+    assert "Alpha" in sheet_names
+    assert "Beta" in sheet_names
+    assert "Gamma" in sheet_names
+
+
+# ---------------------------------------------------------------------------
+# --format csv
+# ---------------------------------------------------------------------------
+
+
+def test_read_format_csv(multisheet_xlsx):
+    """--format csv outputs raw CSV to stdout."""
+    result = runner.invoke(
+        app, ["read", str(multisheet_xlsx), "--sheet", "Alpha", "--format", "csv"]
+    )
+    assert result.exit_code == 0, result.stdout
+    lines = result.stdout.strip().split("\n")
+    # First line is header row
+    assert "Name" in lines[0]
+    assert "Score" in lines[0]
+    # 5 data rows + 1 header = 6 lines
+    assert len(lines) == 6
+
+
+# ---------------------------------------------------------------------------
+# truncated flag
+# ---------------------------------------------------------------------------
+
+
+def test_read_truncated_flag_when_at_limit(multisheet_xlsx):
+    """truncated=true when row_count equals the effective limit."""
+    # Beta has 10 rows; setting limit=5 should truncate
+    result = runner.invoke(app, ["read", str(multisheet_xlsx), "--sheet", "Beta", "--limit", "5"])
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert data["truncated"] is True
+
+
+def test_read_truncated_flag_when_below_limit(multisheet_xlsx):
+    """truncated=false when all rows fit within the limit."""
+    # Alpha has 5 rows; default limit is 100, so not truncated
+    result = runner.invoke(app, ["read", str(multisheet_xlsx), "--sheet", "Alpha"])
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert data["truncated"] is False
