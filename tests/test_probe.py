@@ -2,6 +2,7 @@
 
 import json
 
+import pytest
 from typer.testing import CliRunner
 
 from agent_xlsx.cli import app
@@ -335,3 +336,87 @@ def test_probe_full_with_explicit_sample(rich_xlsx):
     assert "sample" in sales
     # --full sets sample=max(sample, 3), so --sample 5 wins
     assert len(sales["sample"]["head"]) == 5
+
+
+# ---------------------------------------------------------------------------
+# --brief flag — condensed profile
+# ---------------------------------------------------------------------------
+
+
+def test_probe_brief_includes_types_and_nulls(rich_xlsx):
+    """--brief includes column_types and null_counts."""
+    result = runner.invoke(app, ["probe", str(rich_xlsx), "--brief"])
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+
+    sales = data["sheets"][0]
+    assert "column_types" in sales, "--brief should include column_types"
+    assert "null_counts" in sales, "--brief should include null_counts"
+
+
+def test_probe_brief_excludes_sample_and_stats(rich_xlsx):
+    """--brief excludes sample, numeric_summary, and string_summary."""
+    result = runner.invoke(app, ["probe", str(rich_xlsx), "--brief"])
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+
+    sales = data["sheets"][0]
+    assert "sample" not in sales, "--brief should NOT include sample"
+    assert "numeric_summary" not in sales, "--brief should NOT include numeric_summary"
+    assert "string_summary" not in sales, "--brief should NOT include string_summary"
+
+
+# ---------------------------------------------------------------------------
+# String truncation in probe output
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def freetext_xlsx(tmp_path):
+    """Workbook with a free-text column (long strings) for truncation tests."""
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Data"
+    ws["A1"] = "ID"
+    ws["B1"] = "Description"
+    for i in range(2, 12):  # 10 data rows
+        ws[f"A{i}"] = i - 1
+        # 200+ char strings — avg well above FREETEXT_AVG_LENGTH_THRESHOLD (100)
+        ws[f"B{i}"] = f"This is a very long description for item {i - 1}. " * 5
+    p = tmp_path / "freetext.xlsx"
+    wb.save(p)
+    return p
+
+
+def test_probe_stats_free_text_columns_are_compact(freetext_xlsx):
+    """Free-text columns (avg > 100 chars) emit type: free_text instead of top_values."""
+    result = runner.invoke(app, ["probe", str(freetext_xlsx), "--full"])
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+
+    sheet = data["sheets"][0]
+    assert "string_summary" in sheet
+    desc_summary = sheet["string_summary"].get("Description")
+    assert desc_summary is not None, "Description should be in string_summary"
+    assert desc_summary["type"] == "free_text", "Long strings should be classified as free_text"
+    assert "top_values" not in desc_summary, "free_text columns should not have top_values"
+    assert "avg_length" in desc_summary
+
+
+def test_probe_sample_long_strings_are_truncated(freetext_xlsx):
+    """Sample row string values are capped at SAMPLE_VALUE_MAX_CHARS (100) + '...'."""
+    result = runner.invoke(app, ["probe", str(freetext_xlsx), "--sample", "3"])
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+
+    sheet = data["sheets"][0]
+    assert "sample" in sheet
+    # Check all sample rows — description values should be truncated
+    for row in sheet["sample"]["head"]:
+        desc_val = row.get("Description")
+        if desc_val and isinstance(desc_val, str):
+            assert len(desc_val) <= 103, (  # 100 chars + "..."
+                f"Sample string should be truncated to 103 chars, got {len(desc_val)}"
+            )

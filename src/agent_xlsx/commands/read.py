@@ -2,7 +2,7 @@
 
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import polars as pl
 import typer
@@ -15,7 +15,7 @@ from agent_xlsx.adapters.polars_adapter import (
     read_sheet_data,
 )
 from agent_xlsx.cli import app
-from agent_xlsx.formatters.json_formatter import output_spreadsheet_data
+from agent_xlsx.formatters.json_formatter import output_spreadsheet_data, should_include_meta
 from agent_xlsx.utils.constants import DEFAULT_LIMIT, DEFAULT_OFFSET, MAX_READ_ROWS
 from agent_xlsx.utils.dataframe import apply_compact
 from agent_xlsx.utils.dates import detect_date_column_indices, excel_serial_to_isodate
@@ -80,6 +80,12 @@ def read(
         "--all-sheets",
         help="Read the same range(s) from every sheet in the workbook.",
     ),
+    precision: Optional[int] = typer.Option(
+        None,
+        "--precision",
+        "-p",
+        help="Round float values to N decimal places (default: full precision).",
+    ),
 ) -> None:
     """Read data from an Excel range or sheet.
 
@@ -98,7 +104,7 @@ def read(
     effective_limit = min(limit, MAX_READ_ROWS)
 
     if formulas:
-        _read_with_formulas(path, range_, sheet, effective_limit, offset, compact)
+        _read_with_formulas(path, range_, sheet, effective_limit, offset, compact, precision)
         return
 
     # --- Determine ranges to read ---
@@ -133,11 +139,25 @@ def read(
     is_multi = is_multi_range or all_sheets
 
     if is_multi:
-        results = []
+        # Auto-resolve headers for multi-range reads — agents need header
+        # names (e.g. "2014"), not column letters (e.g. "BG"). --no-header
+        # is the explicit opt-out.
+        if not no_header:
+            headers = True
 
-        # Pre-load row-1 headers per sheet (single reader, one file open)
+        results = []
+        _formula_check_cache: dict[str, bool] = {}  # per-sheet formula detection cache
+
+        # Header cache — populated lazily per-sheet. The batch multi-range
+        # reader returns headers from its single file load (no extra open).
+        # For non-batch paths, we open a single reader to fetch headers.
         _header_cache: dict[str, list[str]] = {}
-        if headers and not no_header:
+        _header_cache_loaded = False
+
+        def _ensure_header_cache() -> None:
+            nonlocal _header_cache_loaded
+            if _header_cache_loaded or not (headers and not no_header):
+                return
             import fastexcel
 
             _hdr_reader = fastexcel.read_excel(str(path))
@@ -149,14 +169,32 @@ def read(
                     _header_cache[cache_key] = [c.name for c in _hdr_sheet.available_columns()]
                 except Exception:
                     _header_cache[cache_key] = []
+            _header_cache_loaded = True
 
         for target_sheet in target_sheets:
             sheet_name = target_sheet if isinstance(target_sheet, str) else available[target_sheet]
             if ranges:
-                for ri in ranges:
-                    df, oob_warning = _read_single_range(
-                        path, target_sheet, ri, no_header, effective_limit, offset
-                    )
+                # Batch optimization: load the sheet once and slice each range
+                # from memory, instead of opening N separate readers. The batch
+                # reader also returns row-1 headers, eliminating a separate open.
+                batch_dfs: list[tuple[pl.DataFrame, str | None]] | None = None
+                if len(ranges) > 1:
+                    from agent_xlsx.adapters.polars_adapter import read_multi_ranges
+
+                    batch_dfs, batch_headers = read_multi_ranges(path, target_sheet, ranges)
+                    if batch_headers:
+                        _header_cache[str(target_sheet)] = batch_headers
+                        _header_cache_loaded = True
+                else:
+                    _ensure_header_cache()
+
+                for ri_idx, ri in enumerate(ranges):
+                    if batch_dfs is not None:
+                        df, oob_warning = batch_dfs[ri_idx]
+                    else:
+                        df, oob_warning = _read_single_range(
+                            path, target_sheet, ri, no_header, effective_limit, offset
+                        )
                     df = apply_compact(df, compact)
                     if sort and sort in df.columns:
                         df = df.sort(sort, descending=descending)
@@ -176,7 +214,7 @@ def read(
                             }
                             df = df.rename(rename_map)
 
-                    rows = _df_to_serialisable_rows(df)
+                    rows = _df_to_serialisable_rows(df, precision)
                     rows = _apply_date_conversion(rows, df, path, target_sheet)
 
                     range_str = (
@@ -193,6 +231,11 @@ def read(
                         entry["column_map"] = column_map
                     if oob_warning:
                         entry["warning"] = oob_warning
+                    # Detect uncached formulas (cached per-sheet)
+                    if not formulas and len(df) > 0:
+                        _add_formula_hint_cached(
+                            entry, df, path, target_sheet, available, _formula_check_cache
+                        )
                     results.append(entry)
             else:
                 # No range — full sheet read per sheet
@@ -207,7 +250,7 @@ def read(
                 if sort and sort in df.columns:
                     df = df.sort(sort, descending=descending)
 
-                rows = _df_to_serialisable_rows(df)
+                rows = _df_to_serialisable_rows(df, precision)
                 rows = _apply_date_conversion(rows, df, path, target_sheet)
 
                 results.append(
@@ -221,13 +264,14 @@ def read(
                 )
 
         elapsed_ms = round((time.perf_counter() - start) * 1000, 1)
-        result = {
-            "file_size_human": file_size_human(path),
+        result: dict[str, Any] = {
             "results": results,
             "total_ranges": len(results),
             "compact": compact,
             "read_time_ms": elapsed_ms,
         }
+        if should_include_meta():
+            result["file_size_human"] = file_size_human(path)
         output_spreadsheet_data(result)
         return
 
@@ -278,12 +322,11 @@ def read(
     sheet_name_str = target_sheet if isinstance(target_sheet, str) else available[target_sheet]
     range_str = range_ or f"{sheet_name_str}"
 
-    rows = _df_to_serialisable_rows(df)
+    rows = _df_to_serialisable_rows(df, precision)
     rows = _apply_date_conversion(rows, df, path, target_sheet)
 
-    result = {
+    result: dict[str, Any] = {
         "range": range_str,
-        "file_size_human": file_size_human(path),
         "dimensions": {"rows": len(df), "cols": len(df.columns)},
         "headers": df.columns,
         "data": rows,
@@ -292,10 +335,17 @@ def read(
         "backend": "polars+fastexcel",
         "read_time_ms": elapsed_ms,
     }
+    if should_include_meta():
+        result["file_size_human"] = file_size_human(path)
     if column_map:
         result["column_map"] = column_map
     if oob_warning:
         result["warning"] = oob_warning
+
+    # Detect uncached formulas: flag empty cells that actually hold formulas
+    # so agents don't misinterpret them as missing data
+    if not formulas and len(df) > 0:
+        _add_formula_hint(result, df, path, target_sheet, available)
 
     output_spreadsheet_data(result)
 
@@ -303,6 +353,68 @@ def read(
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+
+def _find_empty_col_indices(df: pl.DataFrame) -> list[int]:
+    """Return column indices that contain null or empty-string values."""
+    empty_indices = []
+    for i, col in enumerate(df.columns):
+        null_count = df[col].null_count()
+        empty_str_count = 0
+        if df[col].dtype in (pl.Utf8, pl.String):
+            empty_str_count = (df[col] == "").sum()
+        if null_count > 0 or empty_str_count > 0:
+            empty_indices.append(i)
+    return empty_indices
+
+
+def _add_formula_hint(
+    result: dict[str, Any],
+    df: pl.DataFrame,
+    path: Path,
+    target_sheet: str | int,
+    available: list[str],
+) -> None:
+    """Add has_uncached_formulas hint to a read result if applicable."""
+    empty_cols = _find_empty_col_indices(df)
+    if not empty_cols:
+        return
+    from agent_xlsx.adapters.polars_adapter import detect_uncached_formulas
+
+    sheet_name = target_sheet if isinstance(target_sheet, str) else available[target_sheet]
+    if detect_uncached_formulas(path, sheet_name, empty_cols):
+        result["has_uncached_formulas"] = True
+        result["hint"] = (
+            "Some cells contain formulas whose cached values are empty "
+            "(not yet recalculated). Use --formulas to see formula strings, "
+            "or run 'recalc' to compute values."
+        )
+
+
+def _add_formula_hint_cached(
+    entry: dict[str, Any],
+    df: pl.DataFrame,
+    path: Path,
+    target_sheet: str | int,
+    available: list[str],
+    cache: dict[str, bool],
+) -> None:
+    """Like _add_formula_hint but caches the result per-sheet."""
+    sheet_name = target_sheet if isinstance(target_sheet, str) else available[target_sheet]
+    if sheet_name not in cache:
+        empty_cols = _find_empty_col_indices(df)
+        if not empty_cols:
+            cache[sheet_name] = False
+        else:
+            from agent_xlsx.adapters.polars_adapter import detect_uncached_formulas
+
+            cache[sheet_name] = detect_uncached_formulas(path, sheet_name, empty_cols)
+    if cache[sheet_name]:
+        entry["has_uncached_formulas"] = True
+        entry["hint"] = (
+            "Some cells contain formulas whose cached values are empty. "
+            "Use --formulas to see formula strings."
+        )
 
 
 def _read_single_range(
@@ -416,6 +528,7 @@ def _read_with_formulas(
     limit: int,
     offset: int,
     compact: bool = True,
+    precision: int | None = None,
 ) -> None:
     """Read with formula strings via openpyxl (slower path)."""
     start = time.perf_counter()
@@ -465,6 +578,9 @@ def _read_with_formulas(
                 # Try to get computed value from data_only workbook
                 value = formula  # We don't have the computed value in non-data_only mode
 
+            if precision is not None and isinstance(value, float):
+                value = round(value, precision)
+
             cells.append(
                 {
                     "cell": cell.coordinate,
@@ -481,15 +597,16 @@ def _read_with_formulas(
 
     elapsed_ms = round((time.perf_counter() - start) * 1000, 1)
 
-    result = {
+    result: dict[str, Any] = {
         "range": range_str or target_sheet,
-        "file_size_human": file_size_human(path),
         "cells": cells[: limit * 20],  # Cap cell output
         "cell_count": len(cells),
         "truncated": len(cells) > limit * 20,
         "backend": "openpyxl",
         "read_time_ms": elapsed_ms,
     }
+    if should_include_meta():
+        result["file_size_human"] = file_size_human(path)
 
     output_spreadsheet_data(result)
 
@@ -502,7 +619,7 @@ def _output_csv(df) -> None:
     sys.stdout.write(csv_str)
 
 
-def _df_to_serialisable_rows(df) -> list[list]:
+def _df_to_serialisable_rows(df, precision: int | None = None) -> list[list]:
     """Convert DataFrame rows to JSON-serialisable lists."""
     rows = df.rows()
     result = []
@@ -515,6 +632,8 @@ def _df_to_serialisable_rows(df) -> list[list]:
                 clean.append(val.isoformat())
             elif isinstance(val, float) and val != val:
                 clean.append(None)
+            elif precision is not None and isinstance(val, float):
+                clean.append(round(val, precision))
             else:
                 clean.append(val)
         result.append(clean)

@@ -35,8 +35,18 @@ def main(
         callback=_version_callback,
         is_eager=True,
     ),
+    no_meta: bool = typer.Option(
+        False,
+        "--no-meta",
+        help="Suppress _data_origin and file_size_human from output. "
+        "Reduces token waste on repeated calls against the same file.",
+    ),
 ) -> None:
     """XLSX file CLI built with Agent Experience (AX) in mind."""
+    if no_meta:
+        from agent_xlsx.formatters.json_formatter import set_suppress_meta
+
+        set_suppress_meta(True)
 
 
 def _register_commands() -> None:

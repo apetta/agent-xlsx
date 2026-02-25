@@ -144,6 +144,7 @@ def write_cmd(
         last = write_data[-1]["cell"]
         result["range"] = f"{first}:{last}"
 
+    json_formatter.relativize_path(result)
     json_formatter.output(result)
 
 

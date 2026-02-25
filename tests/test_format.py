@@ -332,3 +332,95 @@ def test_format_multi_range_output_non_writable_extension(styled_xlsx, tmp_path)
     assert ws["A1"].font.bold is True, "A1 should be bold (first range)"
     assert ws["B1"].font.bold is True, "B1 should be bold (second range)"
     wb.close()
+
+
+# ---------------------------------------------------------------------------
+# Batch formatting (--batch / --batch-file)
+# ---------------------------------------------------------------------------
+
+
+def test_format_batch_basic(styled_xlsx):
+    """--batch applies multiple format groups in one call."""
+    batch_spec = '[{"range": "A1:C1", "bold": true}]'
+    result = runner.invoke(
+        app,
+        ["format", str(styled_xlsx), "A1", "--batch", batch_spec],
+    )
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert data["status"] == "success"
+    assert data["groups_applied"] == 1
+
+    # Verify A1 is bold via --read
+    r = runner.invoke(app, ["format", str(styled_xlsx), "A1", "--read"])
+    assert r.exit_code == 0
+    assert json.loads(r.stdout)["font"]["bold"] is True
+
+
+def test_format_batch_file(styled_xlsx, tmp_path):
+    """--batch-file reads format spec from a JSON file and applies all styles."""
+    batch_spec = [{"range": "A1:C1", "bold": True, "fill_color": "FFFF00"}]
+    batch_file = tmp_path / "batch.json"
+    batch_file.write_text(json.dumps(batch_spec))
+
+    result = runner.invoke(
+        app,
+        ["format", str(styled_xlsx), "A1", "--batch-file", str(batch_file)],
+    )
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert data["status"] == "success"
+    assert data["groups_applied"] == 1
+
+    # Readback: verify bold and fill were actually applied
+    r = runner.invoke(app, ["format", str(styled_xlsx), "A1", "--read"])
+    assert r.exit_code == 0
+    fmt = json.loads(r.stdout)
+    assert fmt["font"]["bold"] is True
+    assert fmt["fill"]["type"] == "solid"
+    assert "FFFF00" in fmt["fill"]["color"].upper()
+
+
+def test_format_batch_comma_ranges(styled_xlsx):
+    """--batch with comma-separated ranges in a single entry formats both ranges."""
+    batch_spec = '[{"range": "A1:C1,A3:C3", "bold": true}]'
+    result = runner.invoke(
+        app,
+        ["format", str(styled_xlsx), "A1", "--batch", batch_spec],
+    )
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert data["status"] == "success"
+    assert data["total_cells_formatted"] == 6  # A1:C1 (3) + A3:C3 (3)
+
+    # A1 and A3 should be bold, A2 should NOT
+    from openpyxl import load_workbook
+
+    wb = load_workbook(str(styled_xlsx))
+    ws = wb.active
+    assert ws["A1"].font.bold is True, "A1 should be bold (first range)"
+    assert ws["A3"].font.bold is True, "A3 should be bold (second range)"
+    assert ws["A2"].font.bold is not True, "A2 should NOT be bold (between ranges)"
+    wb.close()
+
+
+# ---------------------------------------------------------------------------
+# P2 — Relative output path
+# ---------------------------------------------------------------------------
+
+
+def test_format_output_file_is_relative(styled_xlsx):
+    """output_file in response must be present, relative, and match the source filename."""
+    from pathlib import Path
+
+    result = runner.invoke(
+        app,
+        ["format", str(styled_xlsx), "A1", "--bold"],
+    )
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert "output_file" in data, "output_file must be present in format response"
+    assert not data["output_file"].startswith("/"), (
+        f"output_file should be relative, got: {data['output_file']}"
+    )
+    assert Path(data["output_file"]).name == styled_xlsx.name

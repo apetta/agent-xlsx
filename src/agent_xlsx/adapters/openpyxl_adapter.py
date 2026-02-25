@@ -694,13 +694,14 @@ def apply_formatting(
     fill_opts: dict[str, Any] | None = None,
     border_opts: dict[str, Any] | None = None,
     number_format: str | None = None,
+    alignment_opts: dict[str, Any] | None = None,
     output_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Apply formatting to a cell or range.
 
-    Accepts optional font, fill, border dicts and number_format string.
+    Accepts optional font, fill, border, alignment dicts and number_format string.
     """
-    from openpyxl.styles import Border, Font, PatternFill, Side
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
     filepath = Path(filepath)
     keep_vba = filepath.suffix.lower() == ".xlsm"
@@ -746,6 +747,14 @@ def apply_formatting(
             if number_format:
                 cell.number_format = number_format
 
+            if alignment_opts:
+                cell.alignment = Alignment(
+                    horizontal=alignment_opts.get("horizontal", cell.alignment.horizontal),
+                    vertical=alignment_opts.get("vertical", cell.alignment.vertical),
+                    wrap_text=alignment_opts.get("wrap_text", cell.alignment.wrap_text),
+                    text_rotation=alignment_opts.get("text_rotation", cell.alignment.text_rotation),
+                )
+
         save_path = Path(output_path) if output_path else filepath
         if save_path.suffix.lower() not in WRITABLE_EXTENSIONS:
             save_path = save_path.with_suffix(".xlsx")
@@ -754,6 +763,122 @@ def apply_formatting(
         return {
             "status": "success",
             "cells_formatted": len(cells),
+            "output_file": str(save_path),
+        }
+    finally:
+        wb.close()
+
+
+def batch_format(
+    filepath: str | Path,
+    sheet_name: str | None,
+    spec: list[dict[str, Any]],
+    output_path: str | Path | None = None,
+) -> dict[str, Any]:
+    """Apply multiple different formatting groups in a single file open/save.
+
+    Each entry in *spec* has ``range`` (required) plus flat styling keys:
+    bold, italic, font_size, font_color, font_name, fill_color, fill_type,
+    border_style, border_color, number_format, horizontal, vertical,
+    wrap_text, text_rotation.
+    """
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+
+    filepath = Path(filepath)
+    keep_vba = filepath.suffix.lower() == ".xlsm"
+    wb = load_workbook(str(filepath), keep_vba=keep_vba)
+    try:
+        ws = wb[sheet_name] if sheet_name else wb.active
+        total_cells = 0
+
+        for entry in spec:
+            cell_ref = entry.get("range")
+            if not cell_ref:
+                continue
+            # Support comma-separated ranges in a single batch entry
+            # (e.g. "A5:L5,A11:L11" applies the same style to both ranges)
+            if "," in cell_ref:
+                from agent_xlsx.utils.validation import parse_multi_range
+
+                cells = []
+                for parsed in parse_multi_range(cell_ref):
+                    r = (
+                        f"{parsed['start']}:{parsed['end']}"
+                        if parsed.get("end")
+                        else parsed["start"]
+                    )
+                    cells.extend(_resolve_cells(ws, r))
+            else:
+                cells = _resolve_cells(ws, cell_ref)
+
+            # Build style objects from flat keys
+            font_kwargs: dict[str, Any] = {}
+            if "bold" in entry:
+                font_kwargs["bold"] = entry["bold"]
+            if "italic" in entry:
+                font_kwargs["italic"] = entry["italic"]
+            if "font_size" in entry:
+                font_kwargs["size"] = entry["font_size"]
+            if "font_color" in entry:
+                font_kwargs["color"] = entry["font_color"]
+            if "font_name" in entry:
+                font_kwargs["name"] = entry["font_name"]
+
+            fill_color = entry.get("fill_color")
+            number_fmt = entry.get("number_format")
+            border_style = entry.get("border_style")
+            border_color = entry.get("border_color", "000000")
+
+            align_kwargs: dict[str, Any] = {}
+            if "horizontal" in entry:
+                align_kwargs["horizontal"] = entry["horizontal"]
+            if "vertical" in entry:
+                align_kwargs["vertical"] = entry["vertical"]
+            if "wrap_text" in entry:
+                align_kwargs["wrap_text"] = entry["wrap_text"]
+            if "text_rotation" in entry:
+                align_kwargs["text_rotation"] = entry["text_rotation"]
+
+            for cell in cells:
+                if font_kwargs:
+                    cell.font = Font(
+                        name=font_kwargs.get("name", cell.font.name),
+                        size=font_kwargs.get("size", cell.font.size),
+                        bold=font_kwargs.get("bold", cell.font.bold),
+                        italic=font_kwargs.get("italic", cell.font.italic),
+                        color=font_kwargs.get("color", cell.font.color),
+                    )
+                if fill_color:
+                    cell.fill = PatternFill(
+                        fill_type=entry.get("fill_type", "solid"),
+                        fgColor=fill_color,
+                    )
+                if border_style:
+                    side = Side(style=border_style, color=border_color)
+                    cell.border = Border(top=side, bottom=side, left=side, right=side)
+                if number_fmt:
+                    cell.number_format = number_fmt
+                if align_kwargs:
+                    cell.alignment = Alignment(
+                        horizontal=align_kwargs.get("horizontal", cell.alignment.horizontal),
+                        vertical=align_kwargs.get("vertical", cell.alignment.vertical),
+                        wrap_text=align_kwargs.get("wrap_text", cell.alignment.wrap_text),
+                        text_rotation=align_kwargs.get(
+                            "text_rotation", cell.alignment.text_rotation
+                        ),
+                    )
+
+            total_cells += len(cells)
+
+        save_path = Path(output_path) if output_path else filepath
+        if save_path.suffix.lower() not in WRITABLE_EXTENSIONS:
+            save_path = save_path.with_suffix(".xlsx")
+        wb.save(str(save_path))
+
+        return {
+            "status": "success",
+            "groups_applied": len(spec),
+            "total_cells_formatted": total_cells,
             "output_file": str(save_path),
         }
     finally:

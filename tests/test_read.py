@@ -410,3 +410,90 @@ def test_read_default_range_field_is_sheet_name(tabular_xlsx):
         f"Expected sheet name 'Sales' in range field, got '{data['range']}'"
     )
     assert data["range"] != "Product", "range field must not be the column header"
+
+
+# ---------------------------------------------------------------------------
+# --precision flag — float rounding
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def float_xlsx(tmp_path):
+    """Workbook with float values for precision rounding tests."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Floats"
+    ws["A1"] = "Price"
+    ws["B1"] = "Rate"
+    ws["A2"] = 3.14159265
+    ws["B2"] = 2.71828182
+    ws["A3"] = 1.23456789
+    ws["B3"] = 9.87654321
+    ws["A4"] = 100.999999
+    ws["B4"] = 0.123456
+    p = tmp_path / "floats.xlsx"
+    wb.save(p)
+    return p
+
+
+def test_read_precision_rounds_single_range(float_xlsx):
+    """--precision 2 rounds all float values to at most 2 decimal places."""
+    result = runner.invoke(app, ["read", str(float_xlsx), "--precision", "2"])
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    for row in data["data"]:
+        for val in row:
+            if isinstance(val, float):
+                # Check that the value has at most 2 decimal places
+                assert val == round(val, 2), f"Expected <=2 decimals, got {val}"
+
+
+def test_read_precision_rounds_multi_range(float_xlsx):
+    """--precision 1 rounds values in multi-range reads."""
+    result = runner.invoke(app, ["read", str(float_xlsx), "A2:B2,A4:B4", "--precision", "1"])
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    for entry in data["results"]:
+        for row in entry["data"]:
+            for val in row:
+                if isinstance(val, float):
+                    assert val == round(val, 1), f"Expected <=1 decimal, got {val}"
+
+
+# ---------------------------------------------------------------------------
+# Uncached formula hint detection
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def formula_hint_xlsx(tmp_path):
+    """Workbook with formulas that have empty cached values (uncached)."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Sheet1"
+    ws["A1"] = "Value"
+    ws["B1"] = "Total"
+    ws["A2"] = 10
+    ws["B2"] = "=SUM(A1:A2)"  # Formula — cached value will be empty in data_only mode
+    ws["A3"] = 20
+    ws["B3"] = "=SUM(A1:A3)"
+    p = tmp_path / "formula_hint.xlsx"
+    wb.save(p)
+    return p
+
+
+def test_read_detects_uncached_formulas_hint(formula_hint_xlsx):
+    """Default read flags uncached formulas with has_uncached_formulas and hint."""
+    result = runner.invoke(app, ["read", str(formula_hint_xlsx)])
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert data.get("has_uncached_formulas") is True, "Should detect uncached formulas"
+    assert "hint" in data, "Should include a hint about uncached formulas"
+
+
+def test_read_formulas_mode_skips_uncached_hint(formula_hint_xlsx):
+    """--formulas mode does NOT add has_uncached_formulas since formulas are visible."""
+    result = runner.invoke(app, ["read", str(formula_hint_xlsx), "--formulas"])
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert "has_uncached_formulas" not in data, "--formulas should not add uncached formula hint"

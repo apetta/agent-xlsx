@@ -395,3 +395,85 @@ def test_search_unicode(unicode_xlsx):
     assert result.exit_code == 0, result.stdout
     data = json.loads(result.stdout)
     assert data["match_count"] >= 1
+
+
+# ---------------------------------------------------------------------------
+# Search optimization branch — skip_rows vs fullload path
+# ---------------------------------------------------------------------------
+
+
+def test_search_range_small_file_uses_skip_rows(wide_xlsx, monkeypatch):
+    """Small file (<10MB) exercises the skip_rows path, not the fullload path.
+
+    Instruments fastexcel.ExcelReader.load_sheet via a spy to prove the skip_rows
+    branch was taken (skip_rows kwarg present), not the fullload branch.
+    """
+    import fastexcel
+
+    # Spy on load_sheet to record which kwargs each call receives
+    original_load_sheet = fastexcel.ExcelReader.load_sheet
+    load_sheet_calls: list[dict] = []
+
+    def spy_load_sheet(self, sheet_name, **kwargs):
+        load_sheet_calls.append(kwargs)
+        return original_load_sheet(self, sheet_name, **kwargs)
+
+    monkeypatch.setattr(fastexcel.ExcelReader, "load_sheet", spy_load_sheet)
+
+    # wide_xlsx is well under 10MB, so skip_rows path is used.
+    # TARGET is in row 10 across columns A, B, D.
+    result = runner.invoke(app, ["search", str(wide_xlsx), "TARGET", "--range", "A1:E21"])
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+
+    # Functional correctness
+    assert data["match_count"] >= 1
+    for m in data["matches"]:
+        assert m["row"] == 10
+
+    # Branch proof: the skip_rows path passes skip_rows=... to load_sheet,
+    # while the fullload path does not. Filter out probe calls (n_rows=0).
+    data_load_calls = [c for c in load_sheet_calls if c.get("n_rows") != 0]
+    assert data_load_calls, "Expected at least one data-loading load_sheet call"
+    assert any("skip_rows" in c for c in data_load_calls), (
+        "skip_rows was NOT passed — fullload branch was taken instead of skip_rows"
+    )
+
+
+def test_search_range_large_file_uses_fullload(wide_xlsx, monkeypatch):
+    """Monkeypatching the threshold to 1 byte triggers the fullload optimization path.
+
+    Instruments fastexcel.ExcelReader.load_sheet via a spy to prove the fullload
+    branch was taken (no skip_rows kwarg), not just that results are correct.
+    """
+    import fastexcel
+
+    monkeypatch.setattr("agent_xlsx.adapters.polars_adapter.SEARCH_FULLLOAD_FILE_SIZE_THRESHOLD", 1)
+
+    # Spy on load_sheet to record which kwargs each call receives
+    original_load_sheet = fastexcel.ExcelReader.load_sheet
+    load_sheet_calls: list[dict] = []
+
+    def spy_load_sheet(self, sheet_name, **kwargs):
+        load_sheet_calls.append(kwargs)
+        return original_load_sheet(self, sheet_name, **kwargs)
+
+    monkeypatch.setattr(fastexcel.ExcelReader, "load_sheet", spy_load_sheet)
+
+    result = runner.invoke(app, ["search", str(wide_xlsx), "TARGET", "--range", "A1:E21"])
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+
+    # Functional correctness
+    assert data["match_count"] >= 1
+    for m in data["matches"]:
+        assert str(m["value"]) == "TARGET"
+
+    # Branch proof: the fullload path calls load_sheet(name) without skip_rows,
+    # while the skip_rows path always passes skip_rows=... as a kwarg.
+    # Filter out probe calls (n_rows=0) that happen during header detection.
+    data_load_calls = [c for c in load_sheet_calls if c.get("n_rows") != 0]
+    assert data_load_calls, "Expected at least one data-loading load_sheet call"
+    assert all("skip_rows" not in c for c in data_load_calls), (
+        "skip_rows was passed — skip_rows branch was taken instead of fullload"
+    )

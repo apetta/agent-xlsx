@@ -309,3 +309,56 @@ def test_aspose_no_warning_without_env_var(monkeypatch, capsys):
 
     captured = capsys.readouterr()
     assert "ASPOSE_LICENSE_DATA" not in captured.err
+
+
+# ---------------------------------------------------------------------------
+# Group D — --no-meta global flag
+# ---------------------------------------------------------------------------
+
+
+def test_read_no_meta_suppresses_origin_and_size(sample_xlsx):
+    """--no-meta suppresses _data_origin and file_size_human from read output."""
+    import agent_xlsx.formatters.json_formatter as fmt
+
+    result = runner.invoke(app, ["--no-meta", "read", str(sample_xlsx)])
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert "_data_origin" not in data, "_data_origin should be suppressed with --no-meta"
+    assert "file_size_human" not in data, "file_size_human should be suppressed with --no-meta"
+
+    # Reset module state for subsequent tests (CliRunner runs in-process)
+    fmt.set_suppress_meta(False)
+
+    # Confirm default behaviour returns them
+    result2 = runner.invoke(app, ["read", str(sample_xlsx)])
+    assert result2.exit_code == 0, result2.stdout
+    data2 = json.loads(result2.stdout)
+    assert "_data_origin" in data2
+
+
+def test_search_no_meta_suppresses_origin_and_size(sample_xlsx):
+    """--no-meta suppresses _data_origin and file_size_human from search output."""
+    import agent_xlsx.formatters.json_formatter as fmt
+
+    result = runner.invoke(app, ["--no-meta", "search", str(sample_xlsx), "header"])
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert "_data_origin" not in data
+    assert "file_size_human" not in data
+
+    # Reset module state
+    fmt.set_suppress_meta(False)
+
+
+def test_probe_no_meta_suppresses_origin_and_size(sample_xlsx):
+    """--no-meta suppresses _data_origin and file_size_human from probe output."""
+    import agent_xlsx.formatters.json_formatter as fmt
+
+    result = runner.invoke(app, ["--no-meta", "probe", str(sample_xlsx)])
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert "_data_origin" not in data
+    assert "file_size_human" not in data
+
+    # Reset module state
+    fmt.set_suppress_meta(False)

@@ -6,7 +6,7 @@ import typer
 
 from agent_xlsx.adapters.polars_adapter import probe_workbook
 from agent_xlsx.cli import app
-from agent_xlsx.formatters.json_formatter import output_spreadsheet_data
+from agent_xlsx.formatters.json_formatter import output_spreadsheet_data, should_include_meta
 from agent_xlsx.utils.errors import handle_error
 from agent_xlsx.utils.validation import validate_file
 
@@ -43,16 +43,28 @@ def probe(
         "--head-cols",
         help="Limit profiling to first N columns (reduces output for wide files)",
     ),
+    brief: bool = typer.Option(
+        False,
+        "--brief",
+        help="Condensed profile: headers + column_map + column_types + null_counts. "
+        "No samples, no stats, no summaries. Typically <5K output for any file.",
+    ),
 ) -> None:
     """Ultra-fast workbook profiling — lean by default.
 
     Returns sheet names, dimensions, and headers with zero data parsing.
     Speed scales with file size; check file_size_human in the output.
     Use --types, --sample, --stats, or --full to opt into richer detail.
+    Use --brief for a condensed profile ideal for multi-call pipelines.
     """
     path = validate_file(file)
 
-    if full:
+    if brief:
+        # Types + column_map only — no samples, no stats, no summaries
+        types = True
+        stats = False
+        sample = 0
+    elif full:
         types = True
         stats = True
         sample = max(sample, 3)
@@ -68,5 +80,8 @@ def probe(
         no_header=no_header,
         max_columns=head_cols,
     )
+
+    if not should_include_meta():
+        result.pop("file_size_human", None)
 
     output_spreadsheet_data(result)

@@ -2,13 +2,13 @@
 
 import time
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import typer
 
 from agent_xlsx.adapters.polars_adapter import search_values
 from agent_xlsx.cli import app
-from agent_xlsx.formatters.json_formatter import output_spreadsheet_data
+from agent_xlsx.formatters.json_formatter import output_spreadsheet_data, should_include_meta
 from agent_xlsx.utils.constants import MAX_SEARCH_LIMIT, MAX_SEARCH_RESULTS
 from agent_xlsx.utils.errors import InvalidRegexError, SheetNotFoundError, handle_error
 from agent_xlsx.utils.validation import ParsedRange, file_size_human, parse_range, validate_file
@@ -113,14 +113,15 @@ def search(
 
     elapsed_ms = round((time.perf_counter() - start) * 1000, 1)
 
-    result = {
+    result: dict[str, Any] = {
         "query": query,
-        "file_size_human": file_size_human(path),
         "match_count": len(matches),
         "matches": matches,
         "truncated": len(matches) >= effective_limit,
         "search_time_ms": elapsed_ms,
     }
+    if should_include_meta():
+        result["file_size_human"] = file_size_human(path)
 
     output_spreadsheet_data(result)
 

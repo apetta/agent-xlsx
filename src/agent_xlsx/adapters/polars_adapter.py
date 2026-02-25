@@ -16,6 +16,7 @@ from agent_xlsx.utils.constants import (
     CHUNK_THRESHOLD_BYTES,
     MAX_SAMPLE_ROWS,
     MAX_SEARCH_RESULTS,
+    SEARCH_FULLLOAD_FILE_SIZE_THRESHOLD,
 )
 from agent_xlsx.utils.dates import (
     detect_date_column_indices_batch,
@@ -143,6 +144,102 @@ def read_exact_range(
         df = df.rename(dict(zip(df.columns, col_letters[: len(df.columns)])))
 
     return df
+
+
+def read_multi_ranges(
+    filepath: str | Path,
+    sheet_name: str | int,
+    ranges: list[ParsedRange],
+) -> tuple[list[tuple[pl.DataFrame, str | None]], list[str]]:
+    """Read multiple ranges from a single sheet with one file open.
+
+    Opens the fastexcel reader once, loads the full sheet DataFrame once,
+    then slices each range from memory. O(1) per range after initial load.
+
+    Each range dict has keys: start (e.g. "A184608"), end (e.g. "D184608").
+    Returns (results, col_headers) where results is a list of
+    (DataFrame, warning_or_None) in input order, and col_headers is the
+    row-1 header names for column_map resolution.
+    """
+    import re as _re
+
+    fpath = str(filepath)
+    reader = fastexcel.read_excel(fpath)
+    resolved_name = _resolve_sheet_name(fpath, sheet_name)
+
+    # Load full sheet with headers — significantly faster than header_row=None
+    # on large files (~3s vs ~5s). Save header names before renaming to letters.
+    with _suppress_stderr():
+        full_sheet = reader.load_sheet(resolved_name)
+        full_df = pl.DataFrame(full_sheet)
+
+    col_headers = list(full_df.columns)
+    sheet_width = len(full_df.columns)
+
+    # Rename to Excel letters for positional range slicing
+    all_letters = [index_to_col_letter(i) for i in range(sheet_width)]
+    full_df = full_df.rename(dict(zip(full_df.columns, all_letters)))
+
+    results: list[tuple[pl.DataFrame, str | None]] = []
+
+    for ri in ranges:
+        warning = None
+        start_str = ri.get("start", "")
+        end_str = ri.get("end", "")
+
+        if not start_str:
+            # No range specified — return full sheet
+            results.append((full_df, None))
+            continue
+
+        m_start = _re.match(r"^([A-Z]+)(\d+)$", start_str.upper())
+        if not m_start:
+            results.append((pl.DataFrame(), f"Invalid range start: {start_str}"))
+            continue
+
+        start_col_idx = col_letter_to_index(m_start.group(1))
+        start_row = int(m_start.group(2))
+
+        if end_str:
+            m_end = _re.match(r"^([A-Z]+)(\d+)$", end_str.upper())
+            if m_end:
+                end_col_idx = col_letter_to_index(m_end.group(1))
+                end_row = int(m_end.group(2))
+            else:
+                end_col_idx = start_col_idx
+                end_row = start_row
+        else:
+            end_col_idx = start_col_idx
+            end_row = start_row
+
+        # Clamp end column to actual sheet width
+        sheet_max_col_idx = sheet_width - 1
+        if end_col_idx > sheet_max_col_idx:
+            clamped_end_idx = max(sheet_max_col_idx, start_col_idx)
+            omitted = end_col_idx - clamped_end_idx
+            if omitted > 0:
+                actual_last_letter = index_to_col_letter(clamped_end_idx)
+                end_letter = m_end.group(1) if end_str and m_end else start_str
+                warning = (
+                    f"Requested through column {end_letter} but sheet only has data "
+                    f"through {actual_last_letter}. {omitted} column(s) omitted."
+                )
+            end_col_idx = clamped_end_idx
+
+        # Slice rows — header row was consumed by fastexcel, so Excel row N
+        # maps to df row (N - 2). Row 1 = header, row 2 = df[0].
+        n_rows = end_row - start_row + 1
+        df_slice = full_df.slice(max(start_row - 2, 0), n_rows)
+
+        # Select columns
+        col_letters_range = [index_to_col_letter(i) for i in range(start_col_idx, end_col_idx + 1)]
+        available_cols = [c for c in col_letters_range if c in df_slice.columns]
+        if available_cols:
+            df_slice = df_slice.select(available_cols)
+
+        results.append((df_slice, warning))
+
+    return results, col_headers
 
 
 def _read_chunked(
@@ -502,21 +599,59 @@ def search_values(
         all_date_cols = {}
 
     for name in target_sheets:
+        # Cache row-1 header names from the full load so column filter
+        # resolution doesn't need an additional load_sheet call (~2.6s saved).
+        _cached_col_headers: list[str] | None = None
+
         with _suppress_stderr():
             if range_spec and r_start_row is not None and r_end_row is not None:
-                # Range-scoped load: only the rows/cols within the range
-                sheet = reader.load_sheet(
-                    name,
-                    header_row=None,
-                    skip_rows=r_start_row - 1,
-                    n_rows=r_end_row - r_start_row + 1,
-                    use_columns=r_use_cols,
-                )
-                df = pl.DataFrame(sheet)
-                # Rename columns to Excel letters matching range positions
-                base_col = r_start_col_idx or 0
-                col_letters = [index_to_col_letter(base_col + i) for i in range(len(df.columns))]
-                df = df.rename(dict(zip(df.columns, col_letters[: len(df.columns)])))
+                n_range_rows = r_end_row - r_start_row + 1
+
+                # Full-load-then-slice heuristic: for large files, loading the
+                # full sheet and slicing in memory is faster than fastexcel's
+                # sequential skip_rows. Calamine must parse the entire xlsx
+                # regardless (no row index in the format), so skip_rows just
+                # adds per-row overhead with no benefit.
+                use_fullload = file_size_bytes(fpath) >= SEARCH_FULLLOAD_FILE_SIZE_THRESHOLD
+
+                if use_fullload:
+                    # Loading with headers is ~40% faster than header_row=None
+                    # on large files, so prefer it and adjust the row offset.
+                    if no_header:
+                        sheet = reader.load_sheet(name, header_row=None)
+                        df = pl.DataFrame(sheet)
+                        row_offset = r_start_row - 1
+                    else:
+                        sheet = reader.load_sheet(name)
+                        df = pl.DataFrame(sheet)
+                        _cached_col_headers = list(df.columns)
+                        row_offset = r_start_row - 2  # header row consumed
+                    # Rename columns to Excel letters for positional matching
+                    all_letters = [index_to_col_letter(i) for i in range(len(df.columns))]
+                    df = df.rename(dict(zip(df.columns, all_letters)))
+                    # Slice to the requested row range
+                    df = df.slice(max(row_offset, 0), n_range_rows)
+                    # Select only the requested columns
+                    if r_use_cols is not None:
+                        col_subset = [index_to_col_letter(c) for c in r_use_cols]
+                        col_subset = [c for c in col_subset if c in df.columns]
+                        if col_subset:
+                            df = df.select(col_subset)
+                else:
+                    # Standard range-scoped load via fastexcel skip_rows
+                    sheet = reader.load_sheet(
+                        name,
+                        header_row=None,
+                        skip_rows=r_start_row - 1,
+                        n_rows=n_range_rows,
+                        use_columns=r_use_cols,
+                    )
+                    df = pl.DataFrame(sheet)
+                    base_col = r_start_col_idx or 0
+                    n_cols = len(df.columns)
+                    col_letters = [index_to_col_letter(base_col + i) for i in range(n_cols)]
+                    df = df.rename(dict(zip(df.columns, col_letters[: len(df.columns)])))
+
                 range_row_offset = r_start_row
             elif no_header:
                 sheet = reader.load_sheet(name, header_row=None)
@@ -536,11 +671,11 @@ def search_values(
         if columns:
             from agent_xlsx.utils.validation import resolve_column_filter
 
-            # When range or no-header is active, df columns are letters — load
-            # row-1 headers from the already-open reader so header names can be
-            # resolved to column letters without opening the file a second time.
-            col_headers = None
-            if range_spec or no_header:
+            # When range or no-header is active, df columns are letters —
+            # use cached headers from the full load if available, otherwise
+            # load row-1 headers from the already-open reader.
+            col_headers = _cached_col_headers
+            if col_headers is None and (range_spec or no_header):
                 try:
                     hdr_sheet = reader.load_sheet(name, n_rows=0)
                     col_headers = [c.name for c in hdr_sheet.available_columns()]
@@ -624,6 +759,46 @@ def search_values(
                     return matches
 
     return matches
+
+
+def detect_uncached_formulas(
+    filepath: str | Path,
+    sheet_name: str,
+    empty_col_indices: list[int],
+) -> bool:
+    """Check if a sheet has formula cells with empty cached values.
+
+    Opens the file with openpyxl read_only=True, data_only=False and samples
+    cells at the intersection of empty columns and the first rows. Returns
+    True if any cell contains a formula (starts with "=").
+
+    Performance: <100ms for typical files (read_only mode + early exit).
+    """
+    from agent_xlsx.utils.constants import FORMULA_CHECK_SAMPLE_SIZE
+
+    try:
+        from openpyxl import load_workbook
+
+        wb = load_workbook(str(filepath), read_only=True, data_only=False)
+        try:
+            if sheet_name not in wb.sheetnames:
+                return False
+            ws = wb[sheet_name]
+            empty_set = set(empty_col_indices)
+            checked = 0
+            for row in ws.iter_rows(min_row=2, max_row=min(ws.max_row or 100, 100)):
+                for cell in row:
+                    if cell.column is not None and (cell.column - 1) in empty_set:
+                        if isinstance(cell.value, str) and cell.value.startswith("="):
+                            return True
+                        checked += 1
+                        if checked >= FORMULA_CHECK_SAMPLE_SIZE:
+                            return False
+            return False
+        finally:
+            wb.close()
+    except Exception:
+        return False  # Formula detection is best-effort
 
 
 # ---------------------------------------------------------------------------
@@ -771,8 +946,11 @@ def _df_to_sparse_rows(df: pl.DataFrame) -> list[dict[str, Any]]:
     """Convert DataFrame rows to sparse dicts — only non-null cells are included.
 
     This drastically reduces token output for wide sheets with many null
-    separator columns (e.g. 46 elements → 5 keys).
+    separator columns (e.g. 46 elements → 5 keys).  Long string values
+    are truncated to cap sample section size.
     """
+    from agent_xlsx.utils.constants import SAMPLE_VALUE_MAX_CHARS
+
     columns = df.columns
     rows = df.rows()
     result: list[dict[str, Any]] = []
@@ -785,6 +963,8 @@ def _df_to_sparse_rows(df: pl.DataFrame) -> list[dict[str, Any]]:
                 continue  # NaN → skip
             if hasattr(val, "isoformat"):
                 sparse[col_name] = val.isoformat()
+            elif isinstance(val, str) and len(val) > SAMPLE_VALUE_MAX_CHARS:
+                sparse[col_name] = val[:SAMPLE_VALUE_MAX_CHARS] + "..."
             else:
                 sparse[col_name] = val
         result.append(sparse)
@@ -809,15 +989,46 @@ def _build_numeric_summary(df: pl.DataFrame, numeric_cols: list[str]) -> dict[st
 
 
 def _build_string_summary(df: pl.DataFrame, string_cols: list[str]) -> dict[str, Any]:
-    """Build string column summary with unique counts and top values."""
+    """Build string column summary with unique counts and top values.
+
+    Free-text columns (avg length > threshold) get a compact summary with
+    unique count and avg length instead of full top-5 values, since listing
+    3K-char paragraphs as top values wastes tokens without useful insight.
+    Shorter categorical columns get truncated top values.
+    """
+    from agent_xlsx.utils.constants import FREETEXT_AVG_LENGTH_THRESHOLD, STRING_VALUE_MAX_CHARS
+
     summary: dict[str, Any] = {}
     for col in string_cols:
         series = df[col].drop_nulls()
         if len(series) == 0:
             continue
+
         n_unique = series.n_unique()
-        # Get top values by frequency (up to 5)
-        top = series.value_counts(sort=True).head(5).get_column(col).to_list()
+        # str.len_chars().mean() always returns int/float/None for a UInt32 series,
+        # but Polars' generic .mean() return type includes date/timedelta etc.
+        avg_len_raw = series.str.len_chars().mean()
+        avg_len: float | None = None
+        if isinstance(avg_len_raw, (int, float)):
+            avg_len = float(avg_len_raw)
+
+        # Free-text columns: emit a compact descriptor instead of top values
+        if avg_len is not None and avg_len > FREETEXT_AVG_LENGTH_THRESHOLD:
+            summary[col] = {
+                "unique": n_unique,
+                "avg_length": round(avg_len),
+                "type": "free_text",
+            }
+            continue
+
+        # Categorical columns: top-5 values, truncated to cap token output
+        top_raw = series.value_counts(sort=True).head(5).get_column(col).to_list()
+        top = [
+            (v[:STRING_VALUE_MAX_CHARS] + "...")
+            if isinstance(v, str) and len(v) > STRING_VALUE_MAX_CHARS
+            else v
+            for v in top_raw
+        ]
         summary[col] = {
             "unique": n_unique,
             "top_values": top,

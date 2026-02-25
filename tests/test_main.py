@@ -39,3 +39,26 @@ def test_internal_error_produces_json(sample_xlsx):
 
     # Traceback preserved on stderr for developers
     assert "ValueError: simulated internal error" in stderr_buf.getvalue()
+
+
+def test_unknown_option_returns_cli_usage_error():
+    """Unknown CLI flags produce structured JSON with CLI_USAGE_ERROR code.
+
+    Exercises the custom click.UsageError handler in __main__.py which converts
+    Typer/Click usage errors into structured JSON on stdout (exit code 2).
+    """
+    stdout_buf = StringIO()
+
+    with (
+        patch("sys.argv", ["agent-xlsx", "--nonexistent-flag"]),
+        patch.object(sys, "stdout", stdout_buf),
+    ):
+        try:
+            main()
+        except SystemExit as e:
+            assert e.code == 2
+
+    data = json.loads(stdout_buf.getvalue())
+    assert data["error"] is True
+    assert data["code"] == "CLI_USAGE_ERROR"
+    assert "--nonexistent-flag" in data["message"]

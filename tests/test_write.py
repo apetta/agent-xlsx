@@ -338,3 +338,23 @@ def test_write_from_json_file_not_found(tmp_path):
     data = json.loads(result.stdout)
     assert data["error"] is True
     assert data["code"] == "FILE_NOT_FOUND"
+
+
+# ---------------------------------------------------------------------------
+# P2 — Relative output path
+# ---------------------------------------------------------------------------
+
+
+def test_write_output_file_is_relative(tmp_path):
+    """output_file in response must be present, relative, and match the target filename."""
+    from pathlib import Path
+
+    out = tmp_path / "out.xlsx"
+    result = runner.invoke(app, ["write", str(out), "A1", "test"])
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert "output_file" in data, "output_file must be present in write response"
+    assert not data["output_file"].startswith("/"), (
+        f"output_file should be relative, got: {data['output_file']}"
+    )
+    assert Path(data["output_file"]).name == "out.xlsx"

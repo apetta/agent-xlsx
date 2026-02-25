@@ -52,6 +52,21 @@ def format_cmd(
     fill_color: Optional[str] = typer.Option(
         None, "--fill-color", help="Fill color hex (e.g. FFFF00)"
     ),
+    # Alignment — JSON and shorthands
+    alignment: Optional[str] = typer.Option(
+        None,
+        "--alignment",
+        help='Alignment as JSON (e.g. \'{"horizontal": "center", "wrap_text": true}\')',
+    ),
+    wrap_text: Optional[bool] = typer.Option(
+        None, "--wrap-text/--no-wrap-text", help="Enable or disable text wrapping"
+    ),
+    horizontal: Optional[str] = typer.Option(
+        None, "--horizontal", help="Horizontal alignment: left, center, right, justify"
+    ),
+    vertical: Optional[str] = typer.Option(
+        None, "--vertical", help="Vertical alignment: top, center, bottom"
+    ),
     copy_from: Optional[str] = typer.Option(
         None,
         "--copy-from",
@@ -64,9 +79,26 @@ def format_cmd(
         help="Save to a new file instead of overwriting",
     ),
     sheet: Optional[str] = typer.Option(None, "--sheet", "-s", help="Target sheet name"),
+    # Batch mode — apply different styles to different ranges in one call
+    batch: Optional[str] = typer.Option(
+        None,
+        "--batch",
+        help="Batch format spec as JSON array. Each entry: "
+        '\'[{"range": "A1:L1", "bold": true, "fill_color": "4472C4"}]\'',
+    ),
+    batch_file: Optional[str] = typer.Option(
+        None,
+        "--batch-file",
+        help="Path to JSON file with batch format spec (alternative to inline --batch)",
+    ),
 ) -> None:
     """Read or apply cell formatting."""
     path = validate_file(file)
+
+    # --- Batch mode (early exit) ---
+    if batch or batch_file:
+        _handle_batch_format(path, batch, batch_file, sheet, output)
+        return
 
     cell = _normalise_shell_ref(cell)
 
@@ -151,12 +183,16 @@ def format_cmd(
             target_ref=target_cell,
             output_path=output,
         )
+        json_formatter.relativize_path(result)
         json_formatter.output(result)
         return
 
     # --- Apply mode ---
-    has_shorthand = any(v is not None for v in [bold, italic, font_size, font_color, fill_color])
-    has_formatting = any([font, fill, border, number_format]) or has_shorthand
+    has_shorthand = any(
+        v is not None
+        for v in [bold, italic, font_size, font_color, fill_color, wrap_text, horizontal, vertical]
+    )
+    has_formatting = any([font, fill, border, number_format, alignment]) or has_shorthand
     if not has_formatting:
         raise AgentExcelError(
             "MISSING_FORMAT",
@@ -164,7 +200,8 @@ def format_cmd(
             [
                 "Use --read to read formatting",
                 "Use --bold, --italic, --font-size, --font-color, --fill-color for common styles",
-                "Use --font, --fill, --border, or --number-format for full JSON control",
+                "Use --font/--fill/--border/--alignment/--number-format for full JSON control",
+                "Use --horizontal, --vertical, --wrap-text for alignment shorthands",
                 "Use --copy-from to copy formatting from another cell",
             ],
         )
@@ -172,6 +209,7 @@ def format_cmd(
     font_opts = _parse_json_opt(font, "font") if font else None
     fill_opts = _parse_json_opt(fill, "fill") if fill else None
     border_opts = _parse_json_opt(border, "border") if border else None
+    alignment_opts = _parse_json_opt(alignment, "alignment") if alignment else None
 
     # Merge shorthand flags into parsed JSON opts (shorthands layer on top)
     if any(v is not None for v in [bold, italic, font_size, font_color]):
@@ -192,6 +230,17 @@ def format_cmd(
         fill_opts["color"] = fill_color
         fill_opts.setdefault("fill_type", "solid")
 
+    # Merge alignment shorthands
+    if any(v is not None for v in [wrap_text, horizontal, vertical]):
+        if alignment_opts is None:
+            alignment_opts = {}
+        if wrap_text is not None:
+            alignment_opts["wrap_text"] = wrap_text
+        if horizontal is not None:
+            alignment_opts["horizontal"] = horizontal
+        if vertical is not None:
+            alignment_opts["vertical"] = vertical
+
     if is_multi and ranges:
         target_sheet = _resolve_sheet(cell, sheet, str(path), ranges)
         total_formatted = 0
@@ -210,6 +259,7 @@ def format_cmd(
                 fill_opts=fill_opts,
                 border_opts=border_opts,
                 number_format=number_format,
+                alignment_opts=alignment_opts,
                 output_path=output,
             )
             if output:
@@ -241,8 +291,10 @@ def format_cmd(
         fill_opts=fill_opts,
         border_opts=border_opts,
         number_format=number_format,
+        alignment_opts=alignment_opts,
         output_path=output,
     )
+    json_formatter.relativize_path(result)
     json_formatter.output(result)
 
 
@@ -262,6 +314,58 @@ def _resolve_sheet(
     if first_sheet:
         return str(first_sheet)
     return _default_sheet(filepath)
+
+
+def _handle_batch_format(
+    path,
+    batch_json: str | None,
+    batch_file_path: str | None,
+    sheet: str | None,
+    output: str | None,
+) -> None:
+    """Execute batch formatting: different styles to different ranges in one file open/save."""
+    from pathlib import Path as _Path
+
+    if batch_file_path:
+        bf = _Path(batch_file_path)
+        if not bf.exists():
+            raise AgentExcelError(
+                "FILE_NOT_FOUND",
+                f"Batch JSON file '{batch_file_path}' not found",
+                ["Check the batch file path"],
+            )
+        raw: str = bf.read_text(encoding="utf-8")
+    else:
+        assert batch_json is not None  # Guaranteed: caller checks `batch or batch_file`
+        raw = batch_json
+
+    try:
+        spec = json_mod.loads(raw)
+    except json_mod.JSONDecodeError as exc:
+        raise AgentExcelError(
+            "INVALID_JSON",
+            f"Failed to parse batch JSON: {exc}",
+            ['Provide a valid JSON array: \'[{"range": "A1:D1", "bold": true}]\''],
+        )
+    if not isinstance(spec, list):
+        raise AgentExcelError(
+            "INVALID_JSON",
+            "Batch spec must be a JSON array",
+            ['e.g. \'[{"range": "A1:D1", "bold": true, "fill_color": "4472C4"}]\''],
+        )
+    if not spec:
+        raise AgentExcelError(
+            "MISSING_FORMAT",
+            "Batch spec is empty",
+            ["Provide at least one format entry with a range"],
+        )
+
+    from agent_xlsx.adapters import openpyxl_adapter as oxl
+
+    target_sheet = sheet or _default_sheet(str(path))
+    result = oxl.batch_format(str(path), target_sheet, spec, output_path=output)
+    json_formatter.relativize_path(result)
+    json_formatter.output(result)
 
 
 def _parse_json_opt(json_str: str, label: str) -> dict:
