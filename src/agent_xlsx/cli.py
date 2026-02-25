@@ -17,7 +17,7 @@ def _version_callback(value: bool) -> None:
 
 app = typer.Typer(
     name="agent-xlsx",
-    help="XLSX file CLI built with Agent Experience (AX) in mind.",
+    help="Excel file CLI built with Agent Experience (AX) in mind.",
     no_args_is_help=True,
     pretty_exceptions_enable=False,
     add_completion=False,
@@ -42,7 +42,7 @@ def main(
         "Reduces token waste on repeated calls against the same file.",
     ),
 ) -> None:
-    """XLSX file CLI built with Agent Experience (AX) in mind."""
+    """Excel file CLI built with Agent Experience (AX) in mind."""
     if no_meta:
         from agent_xlsx.formatters.json_formatter import set_suppress_meta
 

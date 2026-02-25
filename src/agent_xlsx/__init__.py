@@ -1,4 +1,4 @@
-"""agent-xlsx: XLSX file CLI built with Agent Experience (AX) in mind."""
+"""agent-xlsx: Excel file CLI built with Agent Experience (AX) in mind."""
 
 # Harden stdlib XML parsers against XXE, entity expansion bombs, and DTD
 # retrieval *before* any library (openpyxl, oletools, …) is imported.

@@ -18,7 +18,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "agent-xlsx",
-  description: "XLSX file CLI built with Agent Experience (AX) in mind.",
+  description: "Excel file CLI built with Agent Experience (AX) in mind.",
 };
 
 export default function RootLayout({

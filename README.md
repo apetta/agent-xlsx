@@ -4,7 +4,7 @@
 [![Python](https://img.shields.io/pypi/pyversions/agent-xlsx)](https://pypi.org/project/agent-xlsx/)
 [![License](https://img.shields.io/badge/licence-Apache--2.0-blue)](LICENSE)
 
-**XLSX file CLI built with Agent Experience (AX) in mind.**
+**Excel file CLI built with Agent Experience (AX) in mind.**
 
 agent-xlsx gives LLM agents the same depth of understanding of Excel workbooks that a human gets by opening them in Excel — structure, data, formatting, charts, formulas, VBA, and visual layout — all accessible through a single CLI that returns token-efficient JSON.
 
