@@ -32,6 +32,7 @@ probe (fast)  →  screenshot (visual)  →  read (data)  →  inspect (metadata
 ```bash
 agent-xlsx probe <file>                        # Sheet names, dims, headers, column_map
 agent-xlsx probe <file> --types                # + column types, null counts
+agent-xlsx probe <file> --brief                # Condensed: headers + column_map + types + nulls (minimal tokens)
 agent-xlsx probe <file> --full                 # + types, sample(3), stats, date_summary
 agent-xlsx probe <file> -s "Sales" --full      # Single-sheet deep-dive
 agent-xlsx probe <file> --no-header            # Non-tabular: P&L, dashboards (cols as A,B,C)
@@ -65,6 +66,7 @@ agent-xlsx read <file> "H54:AT54" -s 2022 --no-header            # Non-tabular (
 agent-xlsx read <file> "H54:AT54,H149:AT149" -s 2022             # Multi-range (1 call)
 agent-xlsx read <file> "H54:AT54" --all-sheets                    # Same range, every sheet (1 call)
 agent-xlsx read <file> "H54:AT54,H149:AT149" --all-sheets         # Multi-range × all sheets
+agent-xlsx read <file> "A1:F50" --precision 2                     # Round floats to 2 decimal places
 
 # Search
 agent-xlsx search <file> "revenue"                 # Substring match, all sheets
@@ -108,6 +110,8 @@ agent-xlsx format <file> "A1" --read -s Sales      # Read formatting
 agent-xlsx format <file> "A1:D1" --font '{"bold": true, "size": 14}'
 agent-xlsx format <file> "B2:B100" --number-format "#,##0.00"
 agent-xlsx format <file> "A1:D10" --copy-from "G1" # Copy all formatting
+agent-xlsx format <file> "A1:D1" --horizontal center --bold  # Alignment shorthands
+agent-xlsx format <file> "A1:D1" --batch '[{"range": "A1:L1", "bold": true, "fill_color": "4472C4"}, {"range": "A2:L50", "number_format": "#,##0.00"}]'  # Batch: different styles per range, one save
 ```
 
 ### Write (openpyxl)

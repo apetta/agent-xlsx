@@ -21,6 +21,14 @@ Complete flag reference for all agent-xlsx commands. All commands return JSON to
 
 ---
 
+## Global Flags
+
+| Flag | Description |
+|------|-------------|
+| `--no-meta` | Suppress `_data_origin` and `file_size_human` from output. Reduces token waste on repeated calls against the same file. Applies to all commands that output spreadsheet data |
+
+---
+
 ## probe
 
 Profile workbook structure. **Run first, always.** Uses fastexcel with zero data parsing by default.
@@ -38,6 +46,7 @@ agent-xlsx probe <file> [flags]
 | `--full` | | bool | false | Shorthand for --types --sample 3 --stats |
 | `--no-header` | | bool | false | Treat row 1 as data, columns as Excel letters (A, B, C). Use for non-tabular sheets (P&L, dashboards) |
 | `--head-cols` | | int | all | Limit profiling to first N columns (reduces output for wide files). Full headers are always included; column types/nulls/stats/samples are scoped |
+| `--brief` | | bool | false | Condensed profile: headers + column_map + column_types + null_counts. No samples, no stats, no summaries. Ideal for multi-call pipelines |
 
 **Output:** `sheets[].{name, index, visible, rows, cols, headers, last_col}`, `named_ranges`, `tables`
 
@@ -70,6 +79,7 @@ agent-xlsx read <file> [range] [flags]
 | `--headers` | | bool | false | Resolve column letters to row-1 header names in range reads. Adds `column_map` to output |
 | `--compact/--no-compact` | | bool | **true** | Drop fully-null columns from output (strips separator columns). Use `--no-compact` to preserve all columns |
 | `--all-sheets` | | bool | false | Read the same range(s) from every sheet |
+| `--precision` | `-p` | int | full | Round float values to N decimal places |
 
 **Range** is positional: `"A1:F50"` or `"Sheet1!A1:F50"`. Comma-separated for multi-range: `"Sheet1!A1:C10,E1:G10,H1:J10"` (sheet prefix carries forward).
 
@@ -186,10 +196,18 @@ agent-xlsx format <file> <range> [flags]
 | `--font-size` | | float | | Font size in points (shorthand) |
 | `--font-color` | | str | | Font color hex e.g. `FF0000` (shorthand) |
 | `--fill-color` | | str | | Fill color hex e.g. `FFFF00` (shorthand, implies solid fill) |
+| `--alignment` | | JSON | | `{"horizontal": "center", "vertical": "top", "wrap_text": true, "text_rotation": 45}` |
+| `--wrap-text/--no-wrap-text` | | bool | | Enable or disable text wrapping (shorthand) |
+| `--horizontal` | | str | | Horizontal alignment: left, center, right, justify (shorthand) |
+| `--vertical` | | str | | Vertical alignment: top, center, bottom (shorthand) |
 | `--copy-from` | | str | | Copy all formatting from this cell |
+| `--batch` | | JSON | | Batch format spec as JSON array. Each entry: `[{"range": "A1:L1", "bold": true, "fill_color": "4472C4"}]`. Supports flat style keys: bold, italic, font_size, font_color, font_name, fill_color, fill_type, border_style, border_color, number_format, horizontal, vertical, wrap_text, text_rotation |
+| `--batch-file` | | str | | Path to JSON file with batch format spec (alternative to inline --batch) |
 | `--output` | `-o` | str | in-place | Save to new file |
 
-**Range** is positional: `"A1"`, `"A1:D10"`, or `"Sheet1!A1:D10"`. Comma-separated for multi-range: `"A1:C1,B4"` (sheet prefix carries forward). Multi-range works with `--font`, `--fill`, `--border`, `--number-format`, `--copy-from`, and `--read`.
+**Range** is positional: `"A1"`, `"A1:D10"`, or `"Sheet1!A1:D10"`. Comma-separated for multi-range: `"A1:C1,B4"` (sheet prefix carries forward). Multi-range works with `--font`, `--fill`, `--border`, `--alignment`, `--number-format`, `--copy-from`, and `--read`.
+
+**Batch mode** (`--batch` or `--batch-file`): Applies different styles to different ranges in a single file open/save. The range positional argument is ignored in batch mode. Each batch entry supports comma-separated ranges (e.g. `"A5:L5,A11:L11"`).
 
 ---
 

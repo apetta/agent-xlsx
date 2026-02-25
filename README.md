@@ -155,6 +155,7 @@ agent-xlsx probe data.xlsx --sheet "Sales"
 | `--sample N` | Add N head + N tail rows |
 | `--stats` | Full stats (implies `--types`) |
 | `--full` | Shorthand for `--types --sample 3 --stats` |
+| `--brief` | Condensed: types + column_map only (no samples/stats) |
 | `--sheet` | Target a single sheet |
 
 **Default output** (~250 tokens for 6 sheets):
@@ -257,6 +258,7 @@ agent-xlsx read data.xlsx --sheet Sales "B2:G100"
 agent-xlsx read data.xlsx --limit 500 --offset 100
 agent-xlsx read data.xlsx --formulas
 agent-xlsx read data.xlsx --sort amount --descending
+agent-xlsx read data.xlsx "A1:F50" --precision 2
 ```
 
 ```json
@@ -389,7 +391,7 @@ Use `--output` to write to a new file and preserve the original.
 
 ### `format` — Read and Apply Cell Formatting
 
-Read or modify cell formatting: fonts, fills, borders, number formats.
+Read or modify cell formatting: fonts, fills, borders, alignment, number formats.
 
 Read formatting:
 
@@ -404,7 +406,9 @@ agent-xlsx format data.xlsx "A1:D1" --font '{"bold": true, "size": 14}'
 agent-xlsx format data.xlsx "B2:B100" --number-format "#,##0.00"
 agent-xlsx format data.xlsx "A1:D10" --fill '{"color": "FFFF00"}'
 agent-xlsx format data.xlsx "A1:D10" --border '{"style": "thin"}'
+agent-xlsx format data.xlsx "A1:D1" --horizontal center --bold
 agent-xlsx format data.xlsx "A1:D10" --copy-from "G1"
+agent-xlsx format data.xlsx "A1" --batch '[{"range": "A1:L1", "bold": true, "fill_color": "4472C4"}, {"range": "A2:L50", "number_format": "#,##0.00"}]'
 ```
 
 ```json
