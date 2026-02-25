@@ -165,3 +165,40 @@ def test_read_within_bounds_no_warning(tabular_xlsx):
     assert result.exit_code == 0, result.stdout
     data = json.loads(result.stdout)
     assert "warning" not in data
+
+
+# ---------------------------------------------------------------------------
+# EmptyCell handling in --formulas mode
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def sparse_xlsx(tmp_path):
+    """Workbook with data gaps that produce EmptyCell in read_only mode."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Sparse"
+    ws["A1"] = "Val"
+    ws["B1"] = "Formula"
+    ws["A2"] = 10
+    ws["B2"] = "=SUM(A2:A3)"
+    ws["A3"] = 20
+    ws["B3"] = "=AVERAGE(A2:A3)"
+    # Row 4 intentionally empty — creates EmptyCell objects in read_only mode
+    ws["B5"] = "=A2*2"
+    p = tmp_path / "sparse.xlsx"
+    wb.save(p)
+    return p
+
+
+def test_read_formulas_with_empty_cells(sparse_xlsx):
+    """--formulas handles EmptyCell objects without crashing."""
+    result = runner.invoke(app, ["read", str(sparse_xlsx), "--formulas"])
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert data["backend"] == "openpyxl"
+    # Should have cells from non-empty positions only (compact mode strips empties)
+    assert data["cell_count"] > 0
+    # Verify formulas are captured
+    formulas = [c for c in data["cells"] if c.get("formula")]
+    assert len(formulas) >= 2  # B2, B3, B5 have formulas

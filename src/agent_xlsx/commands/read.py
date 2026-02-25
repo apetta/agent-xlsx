@@ -6,6 +6,7 @@ from typing import Optional
 
 import polars as pl
 import typer
+from openpyxl.cell.read_only import EmptyCell
 
 from agent_xlsx.adapters.polars_adapter import (
     get_sheet_headers,
@@ -452,6 +453,9 @@ def _read_with_formulas(
     cells: list[dict] = []
     for row in rows:
         for cell in row:
+            # Skip empty placeholders from openpyxl's read_only mode
+            if isinstance(cell, EmptyCell):
+                continue
             value = cell.value
             formula = None
             if isinstance(value, str) and value.startswith("="):

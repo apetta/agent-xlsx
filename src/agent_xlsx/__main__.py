@@ -24,6 +24,21 @@ def main() -> None:
         raise
     except click.Abort:
         raise SystemExit(1)
+    except Exception as e:
+        # Preserve full traceback on stderr for developers
+        import traceback
+
+        traceback.print_exc(file=sys.stderr)
+        # Structured JSON on stdout for LLM agents
+        result = {
+            "error": True,
+            "code": "INTERNAL_ERROR",
+            "message": str(e),
+            "exception_type": type(e).__name__,
+        }
+        json.dump(result, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+        raise SystemExit(1)
 
 
 def _handle_usage_error(error: click.UsageError) -> None:

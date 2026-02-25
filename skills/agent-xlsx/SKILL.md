@@ -17,6 +17,8 @@ uvx agent-xlsx probe report.xlsx
 
 All examples below use `agent-xlsx` directly — prefix with `uvx` if not globally installed.
 
+> **This file is a quick-start summary.** Before constructing any command beyond the basic examples shown here, **you must read [commands.md](references/commands.md)** for the full flag reference (types, defaults, edge cases, output schemas). For screenshot/recalc engine setup, read [backends.md](references/backends.md). Guessing at flags leads to errors — the reference is the source of truth.
+
 ## Workflow: Progressive Disclosure
 
 Start lean, opt into detail:
@@ -255,9 +257,9 @@ JSON to stdout by default (raw text for `--format csv|markdown`). Errors:
 
 Codes: `FILE_NOT_FOUND`, `INVALID_FORMAT`, `INVALID_COLUMN`, `FILE_TOO_LARGE`, `SHEET_NOT_FOUND`, `RANGE_INVALID`, `INVALID_REGEX`, `EXCEL_REQUIRED`, `LIBREOFFICE_REQUIRED`, `ASPOSE_NOT_INSTALLED`, `NO_RENDERING_BACKEND`, `MEMORY_EXCEEDED`, `VBA_NOT_FOUND`, `CHART_NOT_FOUND`, `INVALID_MACRO_NAME`, `MACRO_BLOCKED`.
 
-## Deep-Dive Reference
+## Reference Docs — Read Before Non-Trivial Commands
 
-| Reference | When to Read |
-|-----------|-------------|
-| [commands.md](references/commands.md) | Full flag reference for all 14 commands with types and defaults |
-| [backends.md](references/backends.md) | Rendering engine details, platform quirks, Aspose licensing, format support |
+**You must read these before constructing commands with flags not shown in the examples above.** This file is a summary — the references contain the full flag specifications, output schemas, and edge cases.
+
+- **[commands.md](references/commands.md)** — Full flag reference for all 14 commands: every flag with type, default, alias, and output format. **Read this first** when using any flag not demonstrated above.
+- **[backends.md](references/backends.md)** — Rendering engine setup (Aspose, Excel, LibreOffice), platform quirks, licence configuration. Read before `screenshot`, `recalc`, or `objects`.

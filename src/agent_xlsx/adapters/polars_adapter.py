@@ -89,12 +89,13 @@ def read_sheet_data(
     if no_header:
         read_opts["header_row"] = None
 
-    if size < CHUNK_THRESHOLD_BYTES or n_rows is not None:
-        # Direct read — fastexcel handles this efficiently
-        df = pl.read_excel(fpath, sheet_name=resolved_name, read_options=read_opts or None)
-    else:
-        # Chunked read for very large files
-        df = _read_chunked(fpath, resolved_name, skip_rows, n_rows)
+    with _suppress_stderr():
+        if size < CHUNK_THRESHOLD_BYTES or n_rows is not None:
+            # Direct read — fastexcel handles this efficiently
+            df = pl.read_excel(fpath, sheet_name=resolved_name, read_options=read_opts or None)
+        else:
+            # Chunked read for very large files
+            df = _read_chunked(fpath, resolved_name, skip_rows, n_rows)
 
     if no_header:
         col_letters = [index_to_col_letter(i) for i in range(len(df.columns))]
