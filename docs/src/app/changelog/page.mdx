@@ -2,6 +2,20 @@ export const metadata = { title: "Changelog" }
 
 # Changelog
 
+## V0.7.0 (FEBRUARY 2026)
+
+Alignment & batch formatting, multi-range batching, search optimization, and token reduction.
+
+- Added alignment support (`--horizontal`, `--vertical`, `--wrap-text`) and batch formatting (`--batch`/`--batch-file`) for applying multiple styles in a single call
+- Optimised multi-range reads — batches via a single file open with in-memory slicing instead of N separate readers, with automatic header resolution
+- Improved search performance on large files (>10 MB) — full-load-then-slice heuristic avoids slow sequential `skip_rows` in fastexcel/calamine
+- Added `--no-meta` global flag to suppress `_data_origin` and `file_size_human` fields from output
+- Added `--brief` probe mode for condensed column profiles and `--precision` flag for float rounding
+- Detects uncached formula cells and surfaces `has_uncached_formulas` hint so agents don't misinterpret empty cached values as missing data
+- Truncates long strings in probe samples/summaries and classifies free-text columns compactly to prevent token explosions on wide sheets
+- Relativized `output_file` paths in write/format responses
+- Updated skill and README documentation for new flags
+
 ## V0.6.0 (FEBRUARY 2026)
 
 Format shorthands, structured error handling, and reliability fixes.
