@@ -30,6 +30,7 @@ dependencies = [
     "fastexcel>=0.19.0",
     "oletools>=0.60",
     "openpyxl>=3.1.0",
+    "psutil>=5.9.0",
     "Pillow>=10.0.0",
     "polars>=1.0.0",
     "pydantic>=2.0.0",
