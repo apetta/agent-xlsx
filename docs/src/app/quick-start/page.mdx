@@ -5,12 +5,12 @@ export const metadata = { title: "Quick Start" }
 agent-xlsx follows a **progressive disclosure** workflow. Start with the cheapest call, then opt into detail as needed:
 
 ```
-probe (<10ms)  →  screenshot (~3s)  →  read (data)  →  inspect (metadata)
+probe (fast)  →  screenshot (visual)  →  read (data)  →  inspect (metadata)
 ```
 
 ## Probe first
 
-`probe` is instant and returns sheet names, dimensions, headers, and a `column_map` that maps header names to column letters. Always run it first.
+`probe` is lightweight and returns sheet names, dimensions, headers, and a `column_map` that maps header names to column letters. Always run it first.
 
 ```bash
 # Basic profile — sheet names, headers, column_map
